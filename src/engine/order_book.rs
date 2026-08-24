@@ -1,7 +1,7 @@
-use std::collections::{BTreeMap, HashMap, VecDeque};
 use crate::Quantity;
 use crate::domain::{Order, OrderId, Price, Side, Trade};
 use crate::error::OrderBookError;
+use std::collections::{BTreeMap, HashMap, VecDeque};
 
 /// A simple price-time priority limit order book.
 ///
@@ -69,7 +69,7 @@ impl OrderBook {
     }
 
     //Remove order from the given side
-    fn remove_order_from_side(&mut self,order_id: OrderId, side:Side ) -> Option<Order> {
+    fn remove_order_from_side(&mut self, order_id: OrderId, side: Side) -> Option<Order> {
         // find the order book of side
         let levels = match side {
             Side::Buy => &mut self.bids,
@@ -79,10 +79,8 @@ impl OrderBook {
         let mut removed_order = None;
         let mut empty_price_level = None;
 
-
         for (price, orders) in levels.iter_mut() {
             if let Some(index) = orders.iter().position(|order| order.id == order_id) {
-
                 removed_order = orders.remove(index);
                 if orders.is_empty() {
                     empty_price_level = Some(*price);
@@ -96,11 +94,9 @@ impl OrderBook {
             levels.remove(&price);
         }
         removed_order
-
     }
 
     fn remove_order_by_id(&mut self, order_id: OrderId) -> Option<Order> {
-
         let side = self.order_sides.get(&order_id).copied()?;
         let order = self.remove_order_from_side(order_id, side)?;
 
@@ -109,7 +105,12 @@ impl OrderBook {
         Some(order)
     }
 
-    pub fn modify_order(&mut self, order_id: OrderId, new_price: Price, new_quantity: Quantity) -> Result<Vec<Trade>, OrderBookError> {
+    pub fn modify_order(
+        &mut self,
+        order_id: OrderId,
+        new_price: Price,
+        new_quantity: Quantity,
+    ) -> Result<Vec<Trade>, OrderBookError> {
         if new_quantity == 0 {
             return Err(OrderBookError::ZeroQuantity);
         }
@@ -117,12 +118,7 @@ impl OrderBook {
             .remove_order_by_id(order_id)
             .ok_or(OrderBookError::UnknownOrderId)?;
 
-        let updated_order = Order::new(
-            old_order.id,
-            old_order.side,
-            new_price,
-            new_quantity,
-        );
+        let updated_order = Order::new(old_order.id, old_order.side, new_price, new_quantity);
 
         self.add_order(updated_order)
     }
@@ -391,5 +387,35 @@ mod tests {
         let result = book.modify_order(1, 100, 0);
 
         assert_eq!(result, Err(OrderBookError::ZeroQuantity));
+    }
+
+    #[test]
+    fn modify_zero_quantity_does_not_remove_existing_order() {
+        let mut book = OrderBook::new();
+
+        book.add_order(Order::new(1, Side::Buy, 100, 10))
+            .expect("valid order should be accepted");
+
+        let result = book.modify_order(1, 100, 0);
+
+        assert_eq!(result, Err(OrderBookError::ZeroQuantity));
+        assert_eq!(book.best_bid(), Some(100));
+        assert_eq!(book.resting_order_count(), 1);
+    }
+
+    #[test]
+    fn modify_resting_bid_price() {
+        let mut book = OrderBook::new();
+
+        book.add_order(Order::new(1, Side::Buy, 100, 10))
+            .expect("valid order should be accepted");
+
+        let trades = book
+            .modify_order(1, 105, 10)
+            .expect("modify should succeed");
+
+        assert!(trades.is_empty());
+        assert_eq!(book.best_bid(), Some(105));
+        assert_eq!(book.resting_order_count(), 1);
     }
 }
