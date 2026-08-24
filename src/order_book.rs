@@ -166,7 +166,7 @@ impl OrderBook {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Side;
+    use crate::{trade, types::Side};
 
     #[test]
     fn buy_order_rests_when_there_is_no_matching_ask() {
@@ -218,5 +218,71 @@ mod tests {
 
         assert_eq!(trades, vec![Trade::new(2, 3, 101, 5)]);
         assert_eq!(book.best_bid(), Some(99));
+    }
+
+    #[test]
+    fn sell_order_rests_when_there_is_no_matching_bid() {
+        let mut book = OrderBook::new();
+
+        let trades = book.add_order(Order::new(1, Side::Sell, 101, 10));
+
+        assert!(trades.is_empty());
+        assert_eq!(book.best_bid(), None);
+        assert_eq!(book.best_ask(), Some(101));
+        assert_eq!(book.resting_order_count(), 1);
+    }
+
+    #[test]
+    fn buy_does_not_match_bid_below_limit() {
+        let mut book = OrderBook::new();
+        book.add_order(Order::new(1, Side::Buy, 100, 10));
+
+        let trades = book.add_order(Order::new(2, Side::Sell, 101, 5));
+
+        assert!(trades.is_empty());
+        assert_eq!(book.best_bid(), Some(100));
+        assert_eq!(book.best_ask(), Some(101));
+        assert_eq!(book.resting_order_count(), 2);
+    }
+
+    #[test]
+    fn sell_does_not_match_bid_below_limit() {
+        let mut book = OrderBook::new();
+        book.add_order(Order::new(1, Side::Sell, 100, 10));
+
+        let trades = book.add_order(Order::new(2, Side::Buy, 99, 5));
+
+        assert!(trades.is_empty());
+        assert_eq!(book.best_bid(), Some(99));
+        assert_eq!(book.best_ask(), Some(100));
+        assert_eq!(book.resting_order_count(), 2);
+    }
+
+    //Buy sweeps multiple ask levels
+    #[test]
+    fn buy_sweeps_multiple_ask_levels() {
+        let mut book = OrderBook::new();
+        book.add_order(Order::new(1, Side::Sell, 100, 5));
+        book.add_order(Order::new(2, Side::Sell, 101, 5));
+        book.add_order(Order::new(3, Side::Sell, 102, 5));     
+
+        let trades = book.add_order(Order::new(4, Side::Buy, 102, 12));
+        assert_eq!(trades, vec![Trade::new(1, 4, 100, 5), Trade::new(2, 4, 101, 5), Trade::new(3, 4, 102, 2)]);
+        assert_eq!(book.best_ask(), Some(102));
+        assert_eq!(book.resting_order_count(), 1);
+    }
+
+    //Sell sweeps multiple bid levels
+    #[test]
+    fn sell_sweeps_multiple_bid_levels() {
+        let mut book = OrderBook::new();
+        book.add_order(Order::new(1, Side::Buy, 100, 5));
+        book.add_order(Order::new(2, Side::Buy, 101, 5));
+        book.add_order(Order::new(3, Side::Buy, 102, 5));     
+
+        let trades = book.add_order(Order::new(4, Side::Sell, 99, 12));
+        assert_eq!(trades, vec![Trade::new(3, 4, 102, 5), Trade::new(2, 4, 101, 5), Trade::new(1, 4, 100, 2)]);
+        assert_eq!(book.best_bid(), Some(100));
+        assert_eq!(book.resting_order_count(), 1);
     }
 }
