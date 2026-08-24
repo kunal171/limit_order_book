@@ -1,6 +1,6 @@
-use std::collections::{BTreeMap, VecDeque};
 use crate::domain::{Order, OrderId, Price, Side, Trade};
 use crate::error::OrderBookError;
+use std::collections::{BTreeMap, VecDeque};
 
 /// A simple price-time priority limit order book.
 ///
@@ -58,18 +58,18 @@ impl OrderBook {
             .any(|o| o.id == order_id)
     }
 
-    pub fn cancel_order (&mut self, order_id: OrderId) -> Result<(), OrderBookError> {
+    pub fn cancel_order(&mut self, order_id: OrderId) -> Result<(), OrderBookError> {
         if self.remove_order_from_side(order_id, Side::Buy) {
-            return Ok(())
+            return Ok(());
         }
 
         if self.remove_order_from_side(order_id, Side::Sell) {
-            return Ok(())
+            return Ok(());
         }
         Err(OrderBookError::UnknownOrderId)
     }
 
-    fn remove_order_from_side(&mut self,order_id: OrderId, side:Side ) -> bool {
+    fn remove_order_from_side(&mut self, order_id: OrderId, side: Side) -> bool {
         let levels = match side {
             Side::Buy => &mut self.bids,
             Side::Sell => &mut self.asks,
@@ -94,7 +94,6 @@ impl OrderBook {
             levels.remove(&price);
         }
         found
-
     }
 }
 
