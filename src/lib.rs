@@ -7,6 +7,6 @@ pub mod domain;
 pub mod engine;
 pub mod error;
 
-pub use domain::{Order, OrderId, Price, Quantity, Side, Trade};
+pub use domain::{BookEvent, Order, OrderId, Price, Quantity, Side, Trade};
 pub use engine::OrderBook;
 pub use error::OrderBookError;
