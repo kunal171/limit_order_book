@@ -1,6 +1,4 @@
 use std::collections::{BTreeMap, VecDeque};
-
-use crate::OrderId;
 use crate::domain::{Order, OrderId, Price, Side, Trade};
 use crate::error::OrderBookError;
 
@@ -288,6 +286,59 @@ mod tests {
         let result = book.add_order(Order::new(1, Side::Sell, 101, 5));
 
         assert_eq!(result, Err(OrderBookError::DuplicateOrderId));
+        assert_eq!(book.resting_order_count(), 1);
+    }
+
+    #[test]
+    fn cancel_resting_bid_order() {
+        let mut book = OrderBook::new();
+
+        book.add_order(Order::new(1, Side::Buy, 100, 10))
+            .expect("valid order should be accepted");
+
+        let result = book.cancel_order(1);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(book.best_bid(), None);
+        assert_eq!(book.resting_order_count(), 0);
+    }
+
+    #[test]
+    fn cancel_resting_ask_order() {
+        let mut book = OrderBook::new();
+
+        book.add_order(Order::new(1, Side::Sell, 101, 10))
+            .expect("valid order should be accepted");
+
+        let result = book.cancel_order(1);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(book.best_ask(), None);
+        assert_eq!(book.resting_order_count(), 0);
+    }
+
+    #[test]
+    fn cancel_unknown_order_returns_error() {
+        let mut book = OrderBook::new();
+
+        let result = book.cancel_order(999);
+
+        assert_eq!(result, Err(OrderBookError::UnknownOrderId));
+    }
+
+    #[test]
+    fn cancel_one_order_keeps_price_level_when_other_orders_remain() {
+        let mut book = OrderBook::new();
+
+        book.add_order(Order::new(1, Side::Buy, 100, 10))
+            .expect("first order should be accepted");
+        book.add_order(Order::new(2, Side::Buy, 100, 5))
+            .expect("second order should be accepted");
+
+        let result = book.cancel_order(1);
+
+        assert_eq!(result, Ok(()));
+        assert_eq!(book.best_bid(), Some(100));
         assert_eq!(book.resting_order_count(), 1);
     }
 }
