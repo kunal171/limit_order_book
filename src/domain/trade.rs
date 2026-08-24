@@ -1,4 +1,4 @@
-use crate::types::{OrderId, Price, Quantity};
+use super::types::{OrderId, Price, Quantity};
 
 /// A trade produced when an incoming order matches a resting order.
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -1,4 +1,4 @@
-use crate::types::{OrderId, Price, Quantity, Side};
+use super::types::{OrderId, Price, Quantity, Side};
 
 /// A limit order currently entering or resting in the book.
 #[derive(Debug, Clone, PartialEq, Eq)]
