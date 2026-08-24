@@ -1,6 +1,7 @@
+use crate::Quantity;
 use crate::domain::{Order, OrderId, Price, Side, Trade};
 use crate::error::OrderBookError;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 
 /// A simple price-time priority limit order book.
 ///
@@ -8,8 +9,21 @@ use std::collections::{BTreeMap, VecDeque};
 /// `VecDeque` preserves FIFO order inside each price level.
 #[derive(Debug, Default)]
 pub struct OrderBook {
+    /// Resting buy orders grouped by price.
+    ///
+    /// The highest bid is the best bid, so we use `BTreeMap::keys().next_back()`.
     pub(super) bids: BTreeMap<Price, VecDeque<Order>>,
+
+    /// Resting sell orders grouped by price.
+    ///
+    /// The lowest ask is the best ask, so we use `BTreeMap::keys().next()`.
     pub(super) asks: BTreeMap<Price, VecDeque<Order>>,
+
+    /// Small active-order index used by cancel/modify.
+    ///
+    /// This tells us which side a resting order is on, so cancel/modify does not
+    /// need to scan both bids and asks. It only tracks currently resting orders.
+    pub(super) order_sides: HashMap<OrderId, Side>,
 }
 
 impl OrderBook {
@@ -20,12 +34,17 @@ impl OrderBook {
 
     /// Add an order and return all trades caused by that order.
     pub fn add_order(&mut self, order: Order) -> Result<Vec<Trade>, OrderBookError> {
+        // Invalid orders should fail before they can match or mutate book state.
         if order.remaining_qty == 0 {
             return Err(OrderBookError::ZeroQuantity);
         }
-        if self.contains_order_id(order.id) {
+
+        // For now, duplicate detection is for active/resting orders only.
+        // Filled orders are removed from `order_sides`, so their ids can be reused.
+        if self.order_sides.contains_key(&order.id) {
             return Err(OrderBookError::DuplicateOrderId);
         }
+
         let trades = match order.side {
             Side::Buy => self.match_buy_order(order),
             Side::Sell => self.match_sell_order(order),
@@ -50,38 +69,42 @@ impl OrderBook {
             + self.asks.values().map(VecDeque::len).sum::<usize>()
     }
 
-    fn contains_order_id(&self, order_id: OrderId) -> bool {
-        self.bids
-            .values()
-            .chain(self.asks.values())
-            .flat_map(|level| level.iter())
-            .any(|o| o.id == order_id)
-    }
-
+    /// Cancel a currently resting order.
+    ///
+    /// Cancel uses `order_sides` to jump to the correct side first. It still scans
+    /// within that side in this MVP; a later HFT-style version can store full
+    /// order locations to avoid that scan.
     pub fn cancel_order(&mut self, order_id: OrderId) -> Result<(), OrderBookError> {
-        if self.remove_order_from_side(order_id, Side::Buy) {
-            return Ok(());
-        }
+        let side = self
+            .order_sides
+            .get(&order_id)
+            .copied()
+            .ok_or(OrderBookError::UnknownOrderId)?;
 
-        if self.remove_order_from_side(order_id, Side::Sell) {
-            return Ok(());
-        }
-        Err(OrderBookError::UnknownOrderId)
+        self.remove_order_from_side(order_id, side)
+            .ok_or(OrderBookError::UnknownOrderId)?;
+
+        self.order_sides.remove(&order_id);
+
+        Ok(())
     }
 
-    fn remove_order_from_side(&mut self, order_id: OrderId, side: Side) -> bool {
+    /// Remove an order from exactly one side and return the removed order.
+    ///
+    /// We remember an empty price level and remove it after the loop because the
+    /// map is already mutably borrowed while `iter_mut()` is running.
+    fn remove_order_from_side(&mut self, order_id: OrderId, side: Side) -> Option<Order> {
         let levels = match side {
             Side::Buy => &mut self.bids,
             Side::Sell => &mut self.asks,
         };
 
-        let mut found = false;
+        let mut removed_order = None;
         let mut empty_price_level = None;
 
         for (price, orders) in levels.iter_mut() {
             if let Some(index) = orders.iter().position(|order| order.id == order_id) {
-                orders.remove(index);
-                found = true;
+                removed_order = orders.remove(index);
                 if orders.is_empty() {
                     empty_price_level = Some(*price);
                 }
@@ -93,7 +116,46 @@ impl OrderBook {
         if let Some(price) = empty_price_level {
             levels.remove(&price);
         }
-        found
+        removed_order
+    }
+
+    /// Remove a resting order without knowing its side in the caller.
+    ///
+    /// This is shared by `modify_order`, because modify needs the old order's side
+    /// before creating the updated order.
+    fn remove_order_by_id(&mut self, order_id: OrderId) -> Option<Order> {
+        let side = self.order_sides.get(&order_id).copied()?;
+        let order = self.remove_order_from_side(order_id, side)?;
+
+        self.order_sides.remove(&order_id);
+
+        Some(order)
+    }
+
+    /// Modify a resting order by removing it and re-adding an updated order.
+    ///
+    /// MVP rule: every modify loses FIFO priority because the updated order is
+    /// inserted like a fresh order. Later we can make quantity-only reductions
+    /// preserve priority if we want more exchange-like behavior.
+    pub fn modify_order(
+        &mut self,
+        order_id: OrderId,
+        new_price: Price,
+        new_quantity: Quantity,
+    ) -> Result<Vec<Trade>, OrderBookError> {
+        // Validate before removing the existing order so a bad modify request
+        // cannot accidentally delete a valid resting order.
+        if new_quantity == 0 {
+            return Err(OrderBookError::ZeroQuantity);
+        }
+
+        let old_order = self
+            .remove_order_by_id(order_id)
+            .ok_or(OrderBookError::UnknownOrderId)?;
+
+        let updated_order = Order::new(old_order.id, old_order.side, new_price, new_quantity);
+
+        self.add_order(updated_order)
     }
 }
 
@@ -339,5 +401,26 @@ mod tests {
         assert_eq!(result, Ok(()));
         assert_eq!(book.best_bid(), Some(100));
         assert_eq!(book.resting_order_count(), 1);
+    }
+
+    #[test]
+    fn modify_unknown_order_returns_error() {
+        let mut book = OrderBook::new();
+
+        let result = book.modify_order(999, 100, 10);
+
+        assert_eq!(result, Err(OrderBookError::UnknownOrderId));
+    }
+
+    #[test]
+    fn modify_order_rejects_zero_quantity() {
+        let mut book = OrderBook::new();
+
+        book.add_order(Order::new(1, Side::Buy, 100, 10))
+            .expect("valid order should be accepted");
+
+        let result = book.modify_order(1, 100, 0);
+
+        assert_eq!(result, Err(OrderBookError::ZeroQuantity));
     }
 }

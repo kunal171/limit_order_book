@@ -1,4 +1,4 @@
-use crate::domain::{Order, Price, Trade};
+use crate::domain::{Order, Price, Side, Trade};
 
 use super::order_book::OrderBook;
 
@@ -22,6 +22,8 @@ impl OrderBook {
 
         // Any unfilled quantity becomes a resting bid.
         if !incoming.is_filled() {
+            // Only resting orders belong in the active-order index.
+            self.order_sides.insert(incoming.id, Side::Buy);
             self.bids
                 .entry(incoming.price)
                 .or_default()
@@ -50,6 +52,8 @@ impl OrderBook {
 
         // Any unfilled quantity becomes a resting ask.
         if !incoming.is_filled() {
+            // Only resting orders belong in the active-order index.
+            self.order_sides.insert(incoming.id, Side::Sell);
             self.asks
                 .entry(incoming.price)
                 .or_default()
@@ -75,8 +79,11 @@ impl OrderBook {
 
                 trades.push(Trade::new(resting.id, incoming.id, price, traded_qty));
 
+                // A fully filled resting order must leave the active-order index.
                 // A partially filled resting order keeps its FIFO position.
-                if !resting.is_filled() {
+                if resting.is_filled() {
+                    self.order_sides.remove(&resting.id);
+                } else {
                     level.push_front(resting);
                     break;
                 }
@@ -106,8 +113,11 @@ impl OrderBook {
 
                 trades.push(Trade::new(resting.id, incoming.id, price, traded_qty));
 
+                // A fully filled resting order must leave the active-order index.
                 // A partially filled resting order keeps its FIFO position.
-                if !resting.is_filled() {
+                if resting.is_filled() {
+                    self.order_sides.remove(&resting.id);
+                } else {
                     level.push_front(resting);
                     break;
                 }
