@@ -1,19 +1,101 @@
-use limit_order_book::{Order, OrderBook, Side};
+use limit_order_book::simulator::{run_scenario, scenarios};
+use limit_order_book::{load_events_from_file, replay_events, save_events_to_file};
+use serde_json::json;
+use std::env;
 
 fn main() {
-    // This binary is only a small demo. The real matching logic lives in the library.
-    let mut book = OrderBook::new();
+    let args: Vec<String> = env::args().collect();
 
-    // Add one resting buy order.
-    book.add_order(Order::new(1, Side::Buy, 100, 10))
-        .expect("demo buy order should be accepted");
+    // Read scenario name from terminal.
+    // Example: cargo run -- buy-sweeps-asks
+    let scenario_name = args
+        .get(1)
+        .cloned()
+        .unwrap_or_else(|| "simple-cross".to_string());
 
-    // This sell order crosses the buy price, so it creates a trade.
-    let trades = book
-        .add_order(Order::new(2, Side::Sell, 99, 4))
-        .expect("demo sell order should be accepted");
+    let output_json = args.iter().any(|arg| arg == "--json");
 
-    println!("trades: {trades:?}");
-    println!("best bid: {:?}", book.best_bid());
-    println!("best ask: {:?}", book.best_ask());
+    let save_events_path = args
+        .windows(2)
+        .find(|window| window[0] == "--save-events")
+        .map(|window| window[1].clone());
+
+    let replay_events_path = args
+        .windows(2)
+        .find(|window| window[0] == "--replay-events")
+        .map(|window| window[1].clone());
+
+    if let Some(path) = replay_events_path {
+        // Load previously saved events from disk.
+        let events = load_events_from_file(&path).expect("failed to load events");
+
+        // Rebuild the order book from the event stream.
+        let book = replay_events(&events).expect("failed to replay events");
+
+        println!("replayed events from: {path}");
+        println!("best bid: {:?}", book.best_bid());
+        println!("best ask: {:?}", book.best_ask());
+        println!("resting orders: {}", book.resting_order_count());
+        println!("snapshot: {:?}", book.snapshot());
+
+        return;
+    }
+
+    // Choose which predefined scenario to run.
+    let commands = match scenario_name.as_str() {
+        "simple-cross" => scenarios::simple_cross(),
+        "buy-sweeps-asks" => scenarios::buy_sweeps_asks(),
+        "cancel-and-modify" => scenarios::cancel_and_modify_flow(),
+        _ => {
+            eprintln!("unknown scenario: {scenario_name}");
+            eprintln!("available scenarios:");
+            eprintln!("  simple-cross");
+            eprintln!("  buy-sweeps-asks");
+            eprintln!("  cancel-and-modify");
+            std::process::exit(1);
+        }
+    };
+
+    // Run the selected commands against a fresh order book.
+    let result = run_scenario(&commands).expect("scenario should run");
+
+    if let Some(path) = &save_events_path {
+        save_events_to_file(&result.events, path).expect("failed to save events");
+
+        // Keep JSON mode clean so tools can parse stdout.
+        if !output_json {
+            println!("saved events to: {path}");
+        }
+    }
+
+    if output_json {
+        let output = json!({
+            "scenario" : scenario_name,
+            "events" : &result.events,
+            "trades" : &result.trades,
+            "best_bid" : &result.book.best_bid(),
+            "best_ask" : &result.book.best_ask(),
+            "resting_orders": &result.book.resting_order_count(),
+            "snapshot": &result.book.snapshot(),
+        });
+
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&output).expect("output should serialize to json")
+        );
+
+        return;
+    }
+
+    for event in &result.events {
+        println!("  {event:?}");
+    }
+
+    // Print useful output for demo/debugging.
+    println!("scenario: {scenario_name}");
+    println!("trades: {:?}", result.trades);
+    println!("best bid: {:?}", result.book.best_bid());
+    println!("best ask: {:?}", result.book.best_ask());
+    println!("resting orders: {}", result.book.resting_order_count());
+    println!("snapshot: {:?}", result.book.snapshot());
 }
