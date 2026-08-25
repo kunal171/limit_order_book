@@ -1,7 +1,9 @@
+use serde::{Deserialize, Serialize};
+
 use super::types::{OrderId, Price, Quantity};
 
 /// A trade produced when an incoming order matches a resting order.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Trade {
     pub maker_order_id: OrderId,
     pub taker_order_id: OrderId,

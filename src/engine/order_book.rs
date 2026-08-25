@@ -1,5 +1,5 @@
 use crate::Quantity;
-use crate::domain::{Order, OrderId, Price, Side, Trade};
+use crate::domain::{BookEvent, BookSnapshot, Order, OrderId, Price, Side, Trade};
 use crate::error::OrderBookError;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 
@@ -12,6 +12,7 @@ pub struct OrderBook {
     pub(super) bids: BTreeMap<Price, VecDeque<Order>>,
     pub(super) asks: BTreeMap<Price, VecDeque<Order>>,
     pub(super) order_sides: HashMap<OrderId, Side>,
+    pub(super) events: Vec<BookEvent>,
 }
 
 impl OrderBook {
@@ -28,11 +29,22 @@ impl OrderBook {
         if self.order_sides.contains_key(&order.id) {
             return Err(OrderBookError::DuplicateOrderId);
         }
+
+        // Clone because matching consumes the order, but the event log also needs it.
+        self.events.push(BookEvent::OrderAccepted {
+            order: order.clone(),
+        });
+
         let trades = match order.side {
             Side::Buy => self.match_buy_order(order),
             Side::Sell => self.match_sell_order(order),
         };
 
+        for trade in &trades {
+            self.events.push(BookEvent::TradeExecuted {
+                trade: trade.clone(),
+            });
+        }
         Ok(trades)
     }
 
@@ -64,6 +76,8 @@ impl OrderBook {
             .ok_or(OrderBookError::UnknownOrderId)?;
 
         self.order_sides.remove(&order_id);
+
+        self.events.push(BookEvent::OrderCancelled { order_id });
 
         Ok(())
     }
@@ -120,7 +134,50 @@ impl OrderBook {
 
         let updated_order = Order::new(old_order.id, old_order.side, new_price, new_quantity);
 
-        self.add_order(updated_order)
+        let trades = match updated_order.side {
+            Side::Buy => self.match_buy_order(updated_order),
+            Side::Sell => self.match_sell_order(updated_order),
+        };
+
+        self.events.push(BookEvent::OrderModified {
+            order_id,
+            new_price,
+            new_quantity,
+        });
+
+        for trade in &trades {
+            self.events.push(BookEvent::TradeExecuted {
+                trade: trade.clone(),
+            });
+        }
+
+        Ok(trades)
+    }
+
+    /// Return all events emitted by this order book.
+    pub fn events(&self) -> &[BookEvent] {
+        &self.events
+    }
+
+    /// Return a full snapshot of the current book state.
+    ///
+    /// Bids are returned from highest price to lowest price.
+    /// Asks are returned from lowest price to highest price.
+    pub fn snapshot(&self) -> BookSnapshot {
+        let bids = self
+            .bids
+            .iter()
+            .rev()
+            .map(|(price, orders)| (*price, orders.iter().cloned().collect()))
+            .collect();
+
+        let asks = self
+            .asks
+            .iter()
+            .map(|(price, orders)| (*price, orders.iter().cloned().collect()))
+            .collect();
+
+        BookSnapshot { bids, asks }
     }
 }
 
@@ -417,5 +474,106 @@ mod tests {
         assert!(trades.is_empty());
         assert_eq!(book.best_bid(), Some(105));
         assert_eq!(book.resting_order_count(), 1);
+    }
+
+    #[test]
+    fn add_order_records_order_accepted_event() {
+        let mut book = OrderBook::new();
+
+        book.add_order(Order::new(1, Side::Buy, 100, 10))
+            .expect("valid order should be accepted");
+
+        assert_eq!(
+            book.events(),
+            &[BookEvent::OrderAccepted {
+                order: Order::new(1, Side::Buy, 100, 10),
+            }]
+        );
+    }
+
+    #[test]
+    fn matching_order_records_trade_event() {
+        let mut book = OrderBook::new();
+
+        book.add_order(Order::new(1, Side::Buy, 100, 10))
+            .expect("resting buy order should be accepted");
+        let trades = book
+            .add_order(Order::new(2, Side::Sell, 99, 4))
+            .expect("crossing sell order should be accepted");
+
+        assert_eq!(trades, vec![Trade::new(1, 2, 100, 4)]);
+        assert_eq!(
+            book.events(),
+            &[
+                BookEvent::OrderAccepted {
+                    order: Order::new(1, Side::Buy, 100, 10),
+                },
+                BookEvent::OrderAccepted {
+                    order: Order::new(2, Side::Sell, 99, 4),
+                },
+                BookEvent::TradeExecuted {
+                    trade: Trade::new(1, 2, 100, 4),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn cancel_order_records_cancelled_event() {
+        let mut book = OrderBook::new();
+
+        book.add_order(Order::new(1, Side::Buy, 100, 10))
+            .expect("valid order should be accepted");
+        book.cancel_order(1).expect("cancel should succeed");
+
+        assert_eq!(
+            book.events(),
+            &[
+                BookEvent::OrderAccepted {
+                    order: Order::new(1, Side::Buy, 100, 10),
+                },
+                BookEvent::OrderCancelled { order_id: 1 },
+            ]
+        );
+    }
+
+    #[test]
+    fn modify_order_records_modified_event() {
+        let mut book = OrderBook::new();
+
+        book.add_order(Order::new(1, Side::Buy, 100, 10))
+            .expect("valid order should be accepted");
+        book.modify_order(1, 105, 7).expect("modify should succeed");
+
+        assert_eq!(
+            book.events(),
+            &[
+                BookEvent::OrderAccepted {
+                    order: Order::new(1, Side::Buy, 100, 10),
+                },
+                BookEvent::OrderModified {
+                    order_id: 1,
+                    new_price: 105,
+                    new_quantity: 7,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn snapshot_returns_bids_high_to_low_and_asks_low_to_high() {
+        let mut book = OrderBook::new();
+
+        book.add_order(Order::new(1, Side::Buy, 100, 5)).unwrap();
+        book.add_order(Order::new(2, Side::Buy, 102, 5)).unwrap();
+        book.add_order(Order::new(3, Side::Sell, 105, 5)).unwrap();
+        book.add_order(Order::new(4, Side::Sell, 103, 5)).unwrap();
+
+        let snapshot = book.snapshot();
+
+        assert_eq!(snapshot.bids[0].0, 102);
+        assert_eq!(snapshot.bids[1].0, 100);
+        assert_eq!(snapshot.asks[0].0, 103);
+        assert_eq!(snapshot.asks[1].0, 105);
     }
 }
