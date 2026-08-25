@@ -1,5 +1,5 @@
 use limit_order_book::simulator::{run_scenario, scenarios};
-use limit_order_book::save_events_to_file;
+use limit_order_book::{load_events_from_file, replay_events, save_events_to_file};
 use serde_json::json;
 use std::env;
 
@@ -18,6 +18,27 @@ fn main() {
     let save_events_path = args.windows(2)
         .find(|window|window[0] == "--save-events")
         .map(|window| window[1].clone());
+
+    let replay_events_path = args
+        .windows(2)
+        .find(|window| window[0] == "--replay-events")
+        .map(|window| window[1].clone());
+
+    if let Some(path) = replay_events_path {
+        // Load previously saved events from disk.
+        let events = load_events_from_file(&path).expect("failed to load events");
+
+        // Rebuild the order book from the event stream.
+        let book = replay_events(&events).expect("failed to replay events");
+
+        println!("replayed events from: {path}");
+        println!("best bid: {:?}", book.best_bid());
+        println!("best ask: {:?}", book.best_ask());
+        println!("resting orders: {}", book.resting_order_count());
+        println!("snapshot: {:?}", book.snapshot());
+
+        return;
+    }
 
     // Choose which predefined scenario to run.
     let commands = match scenario_name.as_str() {
