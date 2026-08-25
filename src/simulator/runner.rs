@@ -8,7 +8,7 @@ use crate::{BookEvent, OrderBook, OrderBookError, Trade};
 pub struct ScenarioResult {
     pub book: OrderBook,
     pub trades: Vec<Trade>,
-    pub events: Vec<BookEvent>
+    pub events: Vec<BookEvent>,
 }
 
 //Run a list of simulator commands against a fresh order book.
@@ -40,7 +40,7 @@ pub fn run_scenario(commands: &[ScenarioCommand]) -> Result<ScenarioResult, Orde
     Ok(ScenarioResult {
         book,
         trades: all_trades,
-        events
+        events,
     })
 }
 

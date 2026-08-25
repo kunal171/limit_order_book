@@ -41,8 +41,8 @@ pub fn cancel_and_modify_flow() -> Vec<ScenarioCommand> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::simulator::run_scenario;
     use crate::Trade;
+    use crate::simulator::run_scenario;
 
     #[test]
     fn buy_sweep_scenario_produces_expected_trades() {
