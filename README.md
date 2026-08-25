@@ -1,38 +1,25 @@
 # Limit Order Book
 
-A Rust-based limit order book and market microstructure lab.
+A Rust limit order book and market microstructure lab.
 
-The project starts with a deterministic matching engine and will grow in phases into a research platform that combines Rust, AI-assisted analysis, Windmill workflow orchestration, and later HFT-style performance work.
-
-## Project Vision
-
-The core idea is to keep the matching engine simple, correct, and fast:
-
-```text
-incoming order
--> validate
--> match against opposite side
--> emit trades
--> update resting book state
-```
-
-AI, Windmill, reports, dashboards, databases, and workflows will stay outside the matching hot path. They will support research, testing, orchestration, and analysis around the engine.
+The project starts with a deterministic matching engine and grows in phases into
+a research platform for event replay, simulation, benchmarks, AI-assisted
+analysis, Windmill workflows, and later HFT-style performance experiments.
 
 ## Current Status
 
 Current branch:
 
 ```text
-phase-04-event-log-replay
+phase-05-market-data-simulator
 ```
 
-Completed so far:
+Implemented so far:
 
 ```text
 price-time priority matching
 limit buy and sell orders
-partial fills
-full fills
+partial fills and full fills
 best bid and best ask
 trade generation
 zero quantity validation
@@ -40,15 +27,40 @@ duplicate active order id validation
 cancel resting orders
 modify resting orders
 active order side index
-unit tests for matching, validation, cancel, and modify
+book snapshots
+event log
+event replay
+save and load event streams as JSON
+predefined simulator scenarios
+CLI runner for scenarios
+JSON simulator output
 ```
+
+## Core Idea
+
+The matching engine follows this flow:
+
+```text
+incoming order
+-> validate
+-> match against the opposite side
+-> emit trades
+-> rest any leftover quantity
+-> record events
+```
+
+AI, Windmill, databases, dashboards, and reports stay outside the matching hot
+path. They are useful for orchestration and analysis, but the core book should
+remain deterministic and easy to replay.
 
 ## Architecture
 
 ```text
 src/
   domain/
+    event.rs        BookEvent output stream
     order.rs        Order model
+    snapshot.rs     Serializable book snapshot
     trade.rs        Trade model
     types.rs        OrderId, Price, Quantity, Side
 
@@ -56,12 +68,21 @@ src/
     order_book.rs   Public OrderBook API and tests
     matching.rs     Private price-time matching logic
 
+  replay/
+    persistence.rs  Save/load events as JSON
+    replay.rs       Rebuild book state from events
+
+  simulator/
+    scenario.rs     ScenarioCommand input enum
+    scenarios.rs    Predefined market scenarios
+    runner.rs       Runs scenario commands against a fresh book
+
   error.rs          OrderBookError
   lib.rs            Library exports
-  main.rs           Small demo binary
+  main.rs           CLI demo/simulator entrypoint
 ```
 
-The public library exports common types from `lib.rs`, so users can write:
+The public library exports the common types from `lib.rs`, so users can write:
 
 ```rust
 use limit_order_book::{Order, OrderBook, Side};
@@ -71,43 +92,50 @@ use limit_order_book::{Order, OrderBook, Side};
 
 ### Price-Time Priority
 
-The matching engine follows price-time priority:
+The engine follows price-time priority:
 
 ```text
 better price wins first
 same price uses FIFO order
 ```
 
-For buy orders, the best price is the highest bid. For sell orders, the best price is the lowest ask.
+For buy orders, the best price is the highest bid. For sell orders, the best
+price is the lowest ask.
 
 ### Integer Prices
 
 Prices use integer ticks instead of floating point values.
 
 ```text
-good: 10025 paise/ticks
+good: 10025 ticks
 bad: 100.25 as f64
 ```
 
-This avoids floating point rounding issues in financial logic.
+This avoids floating point rounding bugs in financial logic.
 
-### Active Order Index
+### Event Replay
 
-The book stores an active order side index:
+The engine records events such as:
 
 ```text
-order_id -> side
+OrderAccepted
+OrderCancelled
+OrderModified
+TradeExecuted
 ```
 
-This lets cancel and modify jump to the correct side instead of scanning both bids and asks. It is still an MVP structure; later HFT work can replace it with a fuller location index.
+Replay lets us rebuild book state from historical events:
+
+```text
+saved event stream
+-> replay events
+-> same final book snapshot
+```
+
+This is important for debugging, audits, crash recovery, simulation, and later
+analytics.
 
 ## Run
-
-Run the demo:
-
-```bash
-cargo run
-```
 
 Run tests:
 
@@ -121,6 +149,48 @@ Format code:
 cargo fmt
 ```
 
+Run the default scenario:
+
+```bash
+cargo run
+```
+
+Run a specific scenario:
+
+```bash
+cargo run -- simple-cross
+cargo run -- buy-sweeps-asks
+cargo run -- cancel-and-modify
+```
+
+Print simulator output as JSON:
+
+```bash
+cargo run -- buy-sweeps-asks --json
+```
+
+Save generated events:
+
+```bash
+cargo run -- buy-sweeps-asks --save-events events.json
+```
+
+Replay saved events:
+
+```bash
+cargo run -- --replay-events events.json
+```
+
+## Example Output
+
+```bash
+cargo run -- buy-sweeps-asks
+```
+
+This scenario places multiple sell orders and then sends one buy order that
+sweeps through those ask levels. The result shows generated trades, best bid,
+best ask, resting order count, and the final book snapshot.
+
 ## Roadmap
 
 The project is built in phases:
@@ -131,11 +201,12 @@ Phase 2: Correctness tests
 Phase 3: Cancel and modify orders
 Phase 4: Event log and replay
 Phase 5: Market data simulator
-Phase 6: Benchmarks
-Phase 7: LangChain AI analysis layer
-Phase 8: LangGraph research agent
+Phase 6: Market data metrics
+Phase 7: Synthetic order generator
+Phase 8: Benchmarks
 Phase 9: Windmill orchestration
-Phase 10: Advanced HFT optimization
+Phase 10: AI/LangChain/LangGraph analysis
+Phase 11: HFT-style optimization
 ```
 
 Detailed roadmap:
@@ -144,43 +215,17 @@ Detailed roadmap:
 docs/ROADMAP.md
 ```
 
-## Next Phase
-
-Next implementation phase:
-
-```text
-event log and replay
-```
-
-This will introduce events such as:
-
-```text
-OrderAccepted
-OrderRejected
-OrderCancelled
-OrderModified
-TradeExecuted
-BookSnapshot
-```
-
-The goal is to make the engine replayable and auditable:
-
-```text
-same input events
--> same trades
--> same final book state
-```
-
 ## Long-Term Direction
 
-The final project will become:
+The final project direction:
 
 ```text
 Rust matching engine
--> replay and simulation
+-> event replay and market simulation
 -> benchmark reports
--> AI scenario generation and analysis
--> LangGraph experiment workflows
+-> market data metrics
+-> AI scenario analysis
+-> LangGraph research workflows
 -> Windmill scheduled runs and dashboards
 -> HFT-style optimization experiments
 ```

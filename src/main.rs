@@ -15,8 +15,9 @@ fn main() {
 
     let output_json = args.iter().any(|arg| arg == "--json");
 
-    let save_events_path = args.windows(2)
-        .find(|window|window[0] == "--save-events")
+    let save_events_path = args
+        .windows(2)
+        .find(|window| window[0] == "--save-events")
         .map(|window| window[1].clone());
 
     let replay_events_path = args
@@ -58,9 +59,13 @@ fn main() {
     // Run the selected commands against a fresh order book.
     let result = run_scenario(&commands).expect("scenario should run");
 
-    if let Some(path) = save_events_path {
-        save_events_to_file(&result.events, &path).expect("failed to save events");
-        println!("saved events to: {path}");
+    if let Some(path) = &save_events_path {
+        save_events_to_file(&result.events, path).expect("failed to save events");
+
+        // Keep JSON mode clean so tools can parse stdout.
+        if !output_json {
+            println!("saved events to: {path}");
+        }
     }
 
     if output_json {
