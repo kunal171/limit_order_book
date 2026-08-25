@@ -1,5 +1,7 @@
 use limit_order_book::simulator::{run_scenario, scenarios};
-use limit_order_book::{load_events_from_file, replay_events, save_events_to_file};
+use limit_order_book::{
+    calculate_book_metrics, load_events_from_file, replay_events, save_events_to_file,
+};
 use serde_json::json;
 use std::env;
 
@@ -31,13 +33,15 @@ fn main() {
 
         // Rebuild the order book from the event stream.
         let book = replay_events(&events).expect("failed to replay events");
+        //Calculate Metrics
+        let metrics = calculate_book_metrics(&book.snapshot());
 
         println!("replayed events from: {path}");
         println!("best bid: {:?}", book.best_bid());
         println!("best ask: {:?}", book.best_ask());
         println!("resting orders: {}", book.resting_order_count());
         println!("snapshot: {:?}", book.snapshot());
-
+        println!("metrics: {:?}", metrics);
         return;
     }
 
@@ -58,6 +62,7 @@ fn main() {
 
     // Run the selected commands against a fresh order book.
     let result = run_scenario(&commands).expect("scenario should run");
+    let metrics = calculate_book_metrics(&result.book.snapshot());
 
     if let Some(path) = &save_events_path {
         save_events_to_file(&result.events, path).expect("failed to save events");
@@ -77,6 +82,16 @@ fn main() {
             "best_ask" : &result.book.best_ask(),
             "resting_orders": &result.book.resting_order_count(),
             "snapshot": &result.book.snapshot(),
+            "metrics": {
+                "best_bid": metrics.best_bid,
+                "best_ask": metrics.best_ask,
+                "spread": metrics.spread,
+                "mid_price": metrics.mid_price,
+                "total_bid_quantity": metrics.total_bid_quantity,
+                "total_ask_quantity": metrics.total_ask_quantity,
+                "bid_price_levels": metrics.bid_price_levels,
+                "ask_price_levels": metrics.ask_price_levels,
+            },
         });
 
         println!(
@@ -98,4 +113,5 @@ fn main() {
     println!("best ask: {:?}", result.book.best_ask());
     println!("resting orders: {}", result.book.resting_order_count());
     println!("snapshot: {:?}", result.book.snapshot());
+    println!("metrics: {:?}", metrics);
 }
