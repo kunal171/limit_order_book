@@ -1,4 +1,5 @@
 use limit_order_book::simulator::{run_scenario, scenarios};
+use limit_order_book::save_events_to_file;
 use serde_json::json;
 use std::env;
 
@@ -13,6 +14,10 @@ fn main() {
         .unwrap_or_else(|| "simple-cross".to_string());
 
     let output_json = args.iter().any(|arg| arg == "--json");
+
+    let save_events_path = args.windows(2)
+        .find(|window|window[0] == "--save-events")
+        .map(|window| window[1].clone());
 
     // Choose which predefined scenario to run.
     let commands = match scenario_name.as_str() {
@@ -31,6 +36,11 @@ fn main() {
 
     // Run the selected commands against a fresh order book.
     let result = run_scenario(&commands).expect("scenario should run");
+
+    if let Some(path) = save_events_path {
+        save_events_to_file(&result.events, &path).expect("failed to save events");
+        println!("saved events to: {path}");
+    }
 
     if output_json {
         let output = json!({
