@@ -1,5 +1,8 @@
 use limit_order_book::simulator::{run_scenario, scenarios};
-use limit_order_book::{load_events_from_file, replay_events, save_events_to_file};
+use limit_order_book::{
+    BookEvent, calculate_book_metrics, calculate_trade_metrics, load_events_from_file,
+    replay_events, save_events_to_file,
+};
 use serde_json::json;
 use std::env;
 
@@ -31,13 +34,28 @@ fn main() {
 
         // Rebuild the order book from the event stream.
         let book = replay_events(&events).expect("failed to replay events");
+        //Calculate Book Metrics
+        let book_metrics = calculate_book_metrics(&book.snapshot());
+
+        //Fetch Trades from the events
+        let trades = events
+            .iter()
+            .filter_map(|event| match event {
+                BookEvent::TradeExecuted { trade } => Some(trade.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        //Get trade Metrics
+        let trade_metrics = calculate_trade_metrics(&trades);
 
         println!("replayed events from: {path}");
         println!("best bid: {:?}", book.best_bid());
         println!("best ask: {:?}", book.best_ask());
         println!("resting orders: {}", book.resting_order_count());
         println!("snapshot: {:?}", book.snapshot());
-
+        println!("book metrics: {:?}", book_metrics);
+        println!("trade metrics: {:?}", trade_metrics);
         return;
     }
 
@@ -46,18 +64,22 @@ fn main() {
         "simple-cross" => scenarios::simple_cross(),
         "buy-sweeps-asks" => scenarios::buy_sweeps_asks(),
         "cancel-and-modify" => scenarios::cancel_and_modify_flow(),
+        "two-sided-book" => scenarios::two_sided_book(),
         _ => {
             eprintln!("unknown scenario: {scenario_name}");
             eprintln!("available scenarios:");
             eprintln!("  simple-cross");
             eprintln!("  buy-sweeps-asks");
             eprintln!("  cancel-and-modify");
+            eprintln!("  two-sided-book");
             std::process::exit(1);
         }
     };
 
     // Run the selected commands against a fresh order book.
     let result = run_scenario(&commands).expect("scenario should run");
+    let book_metrics = calculate_book_metrics(&result.book.snapshot());
+    let trade_metrics = calculate_trade_metrics(&result.trades);
 
     if let Some(path) = &save_events_path {
         save_events_to_file(&result.events, path).expect("failed to save events");
@@ -77,6 +99,25 @@ fn main() {
             "best_ask" : &result.book.best_ask(),
             "resting_orders": &result.book.resting_order_count(),
             "snapshot": &result.book.snapshot(),
+            "book_metrics": {
+                "best_bid": book_metrics.best_bid,
+                "best_ask": book_metrics.best_ask,
+                "spread": book_metrics.spread,
+                "mid_price": book_metrics.mid_price,
+                "total_bid_quantity": book_metrics.total_bid_quantity,
+                "total_ask_quantity": book_metrics.total_ask_quantity,
+                "bid_price_levels": book_metrics.bid_price_levels,
+                "ask_price_levels": book_metrics.ask_price_levels,
+                "imbalance": book_metrics.imbalance
+            },
+
+            "trade_metrics": {
+                "trade_count": trade_metrics.trade_count,
+                "total_traded_quantity": trade_metrics.total_traded_quantity,
+                "total_notional": trade_metrics.total_notional,
+                "last_trade_price": trade_metrics.last_trade_price,
+                "vwap": trade_metrics.vwap,
+            },
         });
 
         println!(
@@ -98,4 +139,6 @@ fn main() {
     println!("best ask: {:?}", result.book.best_ask());
     println!("resting orders: {}", result.book.resting_order_count());
     println!("snapshot: {:?}", result.book.snapshot());
+    println!("metrics: {:?}", book_metrics);
+    println!("trade metrics: {:?}", trade_metrics);
 }

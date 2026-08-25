@@ -23,6 +23,19 @@ pub fn buy_sweeps_asks() -> Vec<ScenarioCommand> {
     ]
 }
 
+/// Scenario with both sides resting.
+///
+/// This is useful for market-data metrics because spread and mid price
+/// only exist when both best bid and best ask are present.
+pub fn two_sided_book() -> Vec<ScenarioCommand> {
+    vec![
+        ScenarioCommand::Add(Order::new(1, Side::Buy, 100, 10)),
+        ScenarioCommand::Add(Order::new(2, Side::Buy, 99, 5)),
+        ScenarioCommand::Add(Order::new(3, Side::Sell, 105, 7)),
+        ScenarioCommand::Add(Order::new(4, Side::Sell, 106, 3)),
+    ]
+}
+
 /// Scenario that checks normal lifecycle:
 /// add order -> cancel order -> modify order.
 pub fn cancel_and_modify_flow() -> Vec<ScenarioCommand> {

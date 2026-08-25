@@ -3,15 +3,16 @@
 A Rust limit order book and market microstructure lab.
 
 The project starts with a deterministic matching engine and grows in phases into
-a research platform for event replay, simulation, benchmarks, AI-assisted
-analysis, Windmill workflows, and later HFT-style performance experiments.
+a research platform for event replay, simulation, market metrics, benchmarks,
+AI-assisted analysis, Windmill workflows, and later HFT-style performance
+experiments.
 
 ## Current Status
 
-Current branch:
+Completed through:
 
 ```text
-phase-05-market-data-simulator
+Phase 6: Market data metrics
 ```
 
 Implemented so far:
@@ -34,6 +35,9 @@ save and load event streams as JSON
 predefined simulator scenarios
 CLI runner for scenarios
 JSON simulator output
+book metrics
+trade metrics
+order book imbalance
 ```
 
 ## Core Idea
@@ -68,6 +72,10 @@ src/
     order_book.rs   Public OrderBook API and tests
     matching.rs     Private price-time matching logic
 
+  metrics/
+    book_metrics.rs   Spread, mid price, depth, levels, imbalance
+    trade_metrics.rs  Volume, notional, last trade price, VWAP
+
   replay/
     persistence.rs  Save/load events as JSON
     replay.rs       Rebuild book state from events
@@ -82,10 +90,13 @@ src/
   main.rs           CLI demo/simulator entrypoint
 ```
 
-The public library exports the common types from `lib.rs`, so users can write:
+The public library exports common types and helpers from `lib.rs`, so users can
+write:
 
 ```rust
-use limit_order_book::{Order, OrderBook, Side};
+use limit_order_book::{
+    calculate_book_metrics, calculate_trade_metrics, Order, OrderBook, Side,
+};
 ```
 
 ## Important Concepts
@@ -135,6 +146,37 @@ saved event stream
 This is important for debugging, audits, crash recovery, simulation, and later
 analytics.
 
+### Market Metrics
+
+Book metrics describe the final visible market:
+
+```text
+best bid
+best ask
+spread
+mid price
+total bid quantity
+total ask quantity
+bid and ask price levels
+order book imbalance
+```
+
+Trade metrics describe what happened during execution:
+
+```text
+trade count
+total traded quantity
+total notional
+last trade price
+VWAP
+```
+
+VWAP means volume-weighted average price:
+
+```text
+total traded notional / total traded quantity
+```
+
 ## Run
 
 Run tests:
@@ -161,6 +203,7 @@ Run a specific scenario:
 cargo run -- simple-cross
 cargo run -- buy-sweeps-asks
 cargo run -- cancel-and-modify
+cargo run -- two-sided-book
 ```
 
 Print simulator output as JSON:
@@ -181,15 +224,26 @@ Replay saved events:
 cargo run -- --replay-events events.json
 ```
 
-## Example Output
+## Example Metrics
 
 ```bash
-cargo run -- buy-sweeps-asks
+cargo run -- two-sided-book
 ```
 
-This scenario places multiple sell orders and then sends one buy order that
-sweeps through those ask levels. The result shows generated trades, best bid,
-best ask, resting order count, and the final book snapshot.
+This scenario leaves both bids and asks resting in the book, so spread, mid
+price, depth, and imbalance are visible.
+
+Expected market shape:
+
+```text
+best bid: 100
+best ask: 105
+spread: 5
+mid price: 102.5
+total bid quantity: 15
+total ask quantity: 10
+imbalance: 0.6
+```
 
 ## Roadmap
 
@@ -209,6 +263,12 @@ Phase 10: AI/LangChain/LangGraph analysis
 Phase 11: HFT-style optimization
 ```
 
+Next phase:
+
+```text
+Phase 7: Synthetic order generator
+```
+
 Detailed roadmap:
 
 ```text
@@ -222,8 +282,9 @@ The final project direction:
 ```text
 Rust matching engine
 -> event replay and market simulation
--> benchmark reports
 -> market data metrics
+-> synthetic workloads
+-> benchmark reports
 -> AI scenario analysis
 -> LangGraph research workflows
 -> Windmill scheduled runs and dashboards
