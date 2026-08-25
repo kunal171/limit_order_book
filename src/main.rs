@@ -1,19 +1,36 @@
-use limit_order_book::{Order, OrderBook, Side};
+use limit_order_book::simulator::{run_scenario, scenarios};
+use std::env;
 
 fn main() {
-    // This binary is only a small demo. The real matching logic lives in the library.
-    let mut book = OrderBook::new();
+    // Read scenario name from terminal.
+    // Example: cargo run -- buy-sweeps-asks
+    let scenario_name = env::args()
+        .nth(1)
+        .unwrap_or_else(|| "simple-cross".to_string());
 
-    // Add one resting buy order.
-    book.add_order(Order::new(1, Side::Buy, 100, 10))
-        .expect("demo buy order should be accepted");
+    // Choose which predefined scenario to run.
+    let commands = match scenario_name.as_str() {
+        "simple-cross" => scenarios::simple_cross(),
+        "buy-sweeps-asks" => scenarios::buy_sweeps_asks(),
+        "cancel-and-modify" => scenarios::cancel_and_modify_flow(),
+        _ => {
+            eprintln!("unknown scenario: {scenario_name}");
+            eprintln!("available scenarios:");
+            eprintln!("  simple-cross");
+            eprintln!("  buy-sweeps-asks");
+            eprintln!("  cancel-and-modify");
+            std::process::exit(1);
+        }
+    };
 
-    // This sell order crosses the buy price, so it creates a trade.
-    let trades = book
-        .add_order(Order::new(2, Side::Sell, 99, 4))
-        .expect("demo sell order should be accepted");
+    // Run the selected commands against a fresh order book.
+    let result = run_scenario(&commands).expect("scenario should run");
 
-    println!("trades: {trades:?}");
-    println!("best bid: {:?}", book.best_bid());
-    println!("best ask: {:?}", book.best_ask());
+    // Print useful output for demo/debugging.
+    println!("scenario: {scenario_name}");
+    println!("trades: {:?}", result.trades);
+    println!("best bid: {:?}", result.book.best_bid());
+    println!("best ask: {:?}", result.book.best_ask());
+    println!("resting orders: {}", result.book.resting_order_count());
+    println!("snapshot: {:?}", result.book.snapshot());
 }
