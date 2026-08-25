@@ -15,6 +15,7 @@ pub struct BookMetrics {
     pub total_ask_quantity: Quantity,
     pub bid_price_levels: usize,
     pub ask_price_levels: usize,
+    pub imbalance: Option<f64>,
 }
 
 ///
@@ -48,6 +49,14 @@ pub fn calculate_book_metrics(snapshot: &BookSnapshot) -> BookMetrics {
         .map(|order| order.remaining_qty)
         .sum();
 
+    let total_quantity = total_bid_quantity + total_ask_quantity;
+
+    let imbalance = if total_quantity == 0 {
+        None
+    } else {
+        Some(total_bid_quantity as f64 / total_quantity as f64)
+    };
+
     BookMetrics {
         best_bid,
         best_ask,
@@ -57,6 +66,7 @@ pub fn calculate_book_metrics(snapshot: &BookSnapshot) -> BookMetrics {
         total_ask_quantity,
         bid_price_levels: snapshot.bids.len(),
         ask_price_levels: snapshot.asks.len(),
+        imbalance,
     }
 }
 
@@ -87,6 +97,7 @@ mod tests {
         assert_eq!(metrics.total_ask_quantity, 10);
         assert_eq!(metrics.bid_price_levels, 2);
         assert_eq!(metrics.ask_price_levels, 2);
+        assert_eq!(metrics.imbalance, Some(0.6));
     }
 
     #[test]
@@ -104,5 +115,6 @@ mod tests {
         assert_eq!(metrics.mid_price, None);
         assert_eq!(metrics.total_bid_quantity, 10);
         assert_eq!(metrics.total_ask_quantity, 0);
+        assert_eq!(metrics.imbalance, Some(1.0));
     }
 }

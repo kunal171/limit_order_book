@@ -108,6 +108,7 @@ fn main() {
                 "total_ask_quantity": book_metrics.total_ask_quantity,
                 "bid_price_levels": book_metrics.bid_price_levels,
                 "ask_price_levels": book_metrics.ask_price_levels,
+                "imbalance": book_metrics.imbalance
             },
 
             "trade_metrics": {
