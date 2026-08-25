@@ -1,6 +1,5 @@
 use crate::{BookEvent, OrderBook, OrderBookError};
 
-
 /// Rebuild an order book by applying historical events again.
 pub fn replay_events(events: &[BookEvent]) -> Result<OrderBook, OrderBookError> {
     let mut book = OrderBook::new();
@@ -36,7 +35,7 @@ pub fn replay_events(events: &[BookEvent]) -> Result<OrderBook, OrderBookError> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Order, Side};
+    use crate::{Order, OrderBook, Side};
 
     #[test]
     fn replay_rebuilds_same_book_state() {
@@ -52,9 +51,7 @@ mod tests {
 
         let replayed = replay_events(original.events()).expect("replay should succeed");
 
-        assert_eq!(replayed.best_bid(), original.best_bid());
-        assert_eq!(replayed.best_ask(), original.best_ask());
-        assert_eq!(replayed.resting_order_count(), original.resting_order_count());
+        assert_eq!(replayed.get_snapshot(), original.get_snapshot());
         assert_eq!(replayed.events(), original.events());
     }
 }

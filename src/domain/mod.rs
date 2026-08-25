@@ -5,10 +5,12 @@
 
 pub mod event;
 pub mod order;
+pub mod snapshot;
 pub mod trade;
 pub mod types;
 
 pub use event::BookEvent;
 pub use order::Order;
+pub use snapshot::BookSnapshot;
 pub use trade::Trade;
 pub use types::{OrderId, Price, Quantity, Side};

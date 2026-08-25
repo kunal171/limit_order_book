@@ -1,5 +1,5 @@
 use crate::Quantity;
-use crate::domain::{BookEvent, Order, OrderId, Price, Side, Trade};
+use crate::domain::{BookEvent, BookSnapshot, Order, OrderId, Price, Side, Trade};
 use crate::error::OrderBookError;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 
@@ -157,6 +157,27 @@ impl OrderBook {
     /// Return all events emitted by this order book.
     pub fn events(&self) -> &[BookEvent] {
         &self.events
+    }
+
+    /// Return a full snapshot of the current book state.
+    ///
+    /// Bids are returned from highest price to lowest price.
+    /// Asks are returned from lowest price to highest price.
+    pub fn get_snapshot(&self) -> BookSnapshot {
+        let bids = self
+            .bids
+            .iter()
+            .rev()
+            .map(|(price, orders)| (*price, orders.iter().cloned().collect()))
+            .collect();
+
+        let asks = self
+            .asks
+            .iter()
+            .map(|(price, orders)| (*price, orders.iter().cloned().collect()))
+            .collect();
+
+        BookSnapshot { bids, asks }
     }
 }
 
@@ -537,5 +558,22 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn snapshot_returns_bids_high_to_low_and_asks_low_to_high() {
+        let mut book = OrderBook::new();
+
+        book.add_order(Order::new(1, Side::Buy, 100, 5)).unwrap();
+        book.add_order(Order::new(2, Side::Buy, 102, 5)).unwrap();
+        book.add_order(Order::new(3, Side::Sell, 105, 5)).unwrap();
+        book.add_order(Order::new(4, Side::Sell, 103, 5)).unwrap();
+
+        let snapshot = book.get_snapshot();
+
+        assert_eq!(snapshot.bids[0].0, 102);
+        assert_eq!(snapshot.bids[1].0, 100);
+        assert_eq!(snapshot.asks[0].0, 103);
+        assert_eq!(snapshot.asks[1].0, 105);
     }
 }
