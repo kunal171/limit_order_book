@@ -25,6 +25,10 @@ fn main() {
 
     // Run the selected commands against a fresh order book.
     let result = run_scenario(&commands).expect("scenario should run");
+    println!("events:");
+    for event in &result.events {
+        println!("  {event:?}");
+    }
 
     // Print useful output for demo/debugging.
     println!("scenario: {scenario_name}");

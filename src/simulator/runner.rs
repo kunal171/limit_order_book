@@ -1,5 +1,5 @@
 use crate::simulator::ScenarioCommand;
-use crate::{OrderBook, OrderBookError, Trade};
+use crate::{BookEvent, OrderBook, OrderBookError, Trade};
 
 /// Result of running a simulator scenario.
 ///
@@ -8,6 +8,7 @@ use crate::{OrderBook, OrderBookError, Trade};
 pub struct ScenarioResult {
     pub book: OrderBook,
     pub trades: Vec<Trade>,
+    pub events: Vec<BookEvent>
 }
 
 //Run a list of simulator commands against a fresh order book.
@@ -34,10 +35,12 @@ pub fn run_scenario(commands: &[ScenarioCommand]) -> Result<ScenarioResult, Orde
             }
         }
     }
+    let events = book.events().to_vec();
 
     Ok(ScenarioResult {
         book,
         trades: all_trades,
+        events
     })
 }
 
@@ -58,5 +61,6 @@ mod tests {
         assert_eq!(result.trades, vec![Trade::new(1, 2, 100, 2)]);
         assert_eq!(result.book.best_ask(), Some(100));
         assert_eq!(result.book.resting_order_count(), 1);
+        assert_eq!(result.events.len(), 3);
     }
 }
