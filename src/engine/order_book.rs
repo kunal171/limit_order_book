@@ -163,7 +163,7 @@ impl OrderBook {
     ///
     /// Bids are returned from highest price to lowest price.
     /// Asks are returned from lowest price to highest price.
-    pub fn get_snapshot(&self) -> BookSnapshot {
+    pub fn snapshot(&self) -> BookSnapshot {
         let bids = self
             .bids
             .iter()
@@ -569,7 +569,7 @@ mod tests {
         book.add_order(Order::new(3, Side::Sell, 105, 5)).unwrap();
         book.add_order(Order::new(4, Side::Sell, 103, 5)).unwrap();
 
-        let snapshot = book.get_snapshot();
+        let snapshot = book.snapshot();
 
         assert_eq!(snapshot.bids[0].0, 102);
         assert_eq!(snapshot.bids[1].0, 100);

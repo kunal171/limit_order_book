@@ -1,7 +1,8 @@
 use super::types::{OrderId, Price, Quantity, Side};
+use serde::{Deserialize, Serialize};
 
 /// A limit order currently entering or resting in the book.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Order {
     pub id: OrderId,
     pub side: Side,

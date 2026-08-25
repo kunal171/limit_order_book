@@ -10,3 +10,4 @@ pub mod replay;
 pub use domain::{BookEvent, BookSnapshot, Order, OrderId, Price, Quantity, Side, Trade};
 pub use engine::OrderBook;
 pub use error::OrderBookError;
+pub use replay::{load_events_from_file, replay_events, save_events_to_file};

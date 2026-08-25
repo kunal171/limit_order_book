@@ -51,7 +51,73 @@ mod tests {
 
         let replayed = replay_events(original.events()).expect("replay should succeed");
 
-        assert_eq!(replayed.get_snapshot(), original.get_snapshot());
+        assert_eq!(replayed.snapshot(), original.snapshot());
+        assert_eq!(replayed.events(), original.events());
+    }
+
+    // Replay rebuilds with canceled orders
+    #[test]
+    fn replay_rebuilds_book_after_cancel() {
+        let mut original = OrderBook::new();
+
+        original
+            .add_order(Order::new(1, Side::Buy, 100, 10))
+            .expect("order should be accepted");
+
+        original
+            .add_order(Order::new(2, Side::Buy, 101, 5))
+            .expect("order should be accepted");
+
+        original.cancel_order(1).expect("cancel should succeed");
+
+        let replayed = replay_events(original.events()).expect("replay should succeed");
+
+        assert_eq!(replayed.snapshot(), original.snapshot());
+        assert_eq!(replayed.events(), original.events());
+    }
+
+    //Relay builds with modified orders
+    #[test]
+    fn replay_rebuilds_book_after_modify() {
+        let mut original = OrderBook::new();
+
+        original
+            .add_order(Order::new(1, Side::Buy, 100, 10))
+            .expect("order should be accepted");
+
+        original
+            .modify_order(1, 105, 7)
+            .expect("modify should succeed");
+
+        let replayed = replay_events(original.events()).expect("replay should succeed");
+
+        assert_eq!(replayed.snapshot(), original.snapshot());
+        assert_eq!(replayed.events(), original.events());
+    }
+
+    #[test]
+    fn replay_rebuilds_book_after_multi_level_matching() {
+        let mut original = OrderBook::new();
+
+        original
+            .add_order(Order::new(1, Side::Sell, 100, 5))
+            .expect("order should be accepted");
+
+        original
+            .add_order(Order::new(2, Side::Sell, 101, 5))
+            .expect("order should be accepted");
+
+        original
+            .add_order(Order::new(3, Side::Sell, 102, 5))
+            .expect("order should be accepted");
+
+        original
+            .add_order(Order::new(4, Side::Buy, 102, 12))
+            .expect("order should be accepted");
+
+        let replayed = replay_events(original.events()).expect("replay should succeed");
+
+        assert_eq!(replayed.snapshot(), original.snapshot());
         assert_eq!(replayed.events(), original.events());
     }
 }

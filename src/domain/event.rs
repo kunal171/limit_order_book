@@ -3,7 +3,9 @@
 use crate::Quantity;
 use crate::domain::{Order, OrderId, Price, Trade};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BookEvent {
     OrderAccepted {
         order: Order,

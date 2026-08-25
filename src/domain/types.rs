@@ -1,5 +1,5 @@
 //! Small domain types used by the order book.
-
+use serde::{Deserialize, Serialize};
 /// Unique id for an order.
 pub type OrderId = u64;
 
@@ -13,7 +13,7 @@ pub type Price = u64;
 pub type Quantity = u64;
 
 /// Direction of an order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Side {
     Buy,
     Sell,
