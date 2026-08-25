@@ -13,5 +13,5 @@ pub mod simulator;
 pub use domain::{BookEvent, BookSnapshot, Order, OrderId, Price, Quantity, Side, Trade};
 pub use engine::OrderBook;
 pub use error::OrderBookError;
-pub use metrics::{BookMetrics, calculate_book_metrics};
+pub use metrics::{BookMetrics, TradeMetrics, calculate_book_metrics, calculate_trade_metrics};
 pub use replay::{load_events_from_file, replay_events, save_events_to_file};
