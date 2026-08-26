@@ -45,6 +45,43 @@ pub fn generate_two_sided_orders(config: GeneratorConfig) -> Vec<ScenarioCommand
         .collect()
 }
 
+/// Generate deterministic orders that intentionally cross the spread.
+///
+/// First half builds ask liquidity above the base price.
+/// Second half sends buy orders that cross those asks and create trades.
+pub fn generate_crossing_orders(config: GeneratorConfig) -> Vec<ScenarioCommand> {
+    let price_levels = config.price_levels.max(1);
+    let split = config.order_count / 2;
+
+    let mut commands = Vec::with_capacity(config.order_count);
+
+    for index in 0..split {
+        let order_id = config.start_order_id + index as u64;
+        let level = (index % price_levels) as u64 + 1;
+        let price = config.base_price + level * config.tick_size;
+
+        commands.push(ScenarioCommand::Add(Order::new(
+            order_id,
+            Side::Sell,
+            price,
+            config.quantity,
+        )));
+    }
+
+    for index in split..config.order_count {
+        let order_id = config.start_order_id + index as u64;
+
+        commands.push(ScenarioCommand::Add(Order::new(
+            order_id,
+            Side::Buy,
+            config.base_price + price_levels as u64 * config.tick_size,
+            config.quantity,
+        )));
+    }
+
+    commands
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -78,5 +115,21 @@ mod tests {
         let second = generate_two_sided_orders(config);
 
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn generated_crossing_orders_create_trades() {
+        let commands = generate_crossing_orders(GeneratorConfig {
+            order_count: 10,
+            start_order_id: 1,
+            base_price: 100,
+            tick_size: 1,
+            price_levels: 3,
+            quantity: 5,
+        });
+
+        let result = crate::simulator::run_scenario(&commands).expect("scenario should run");
+
+        assert!(!result.trades.is_empty());
     }
 }

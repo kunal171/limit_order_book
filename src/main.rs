@@ -1,5 +1,5 @@
 use limit_order_book::simulator::{
-    GeneratorConfig, generate_two_sided_orders, run_scenario, scenarios,
+    GeneratorConfig, generate_crossing_orders, generate_two_sided_orders, run_scenario, scenarios,
 };
 use limit_order_book::{
     BookEvent, calculate_book_metrics, calculate_trade_metrics, load_events_from_file,
@@ -83,6 +83,15 @@ fn main() {
             price_levels: 10,
             quantity: 5,
         }),
+        "synthetic-crossing" => generate_crossing_orders(GeneratorConfig {
+            order_count: synthetic_count,
+            start_order_id: 1,
+            base_price: 100,
+            tick_size: 1,
+            price_levels: 10,
+            quantity: 5,
+        }),
+
         _ => {
             eprintln!("unknown scenario: {scenario_name}");
             eprintln!("available scenarios:");
@@ -91,6 +100,7 @@ fn main() {
             eprintln!("  cancel-and-modify");
             eprintln!("  two-sided-book");
             eprintln!("  synthetic");
+            eprintln!("  synthetic-crossing");
             std::process::exit(1);
         }
     };
