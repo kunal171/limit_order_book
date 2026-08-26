@@ -12,7 +12,7 @@ experiments.
 Completed through:
 
 ```text
-Phase 7: Synthetic order generator
+Phase 8: Benchmarks
 ```
 
 Implemented so far:
@@ -41,6 +41,9 @@ order book imbalance
 deterministic two-sided synthetic order generation
 deterministic crossing synthetic order generation
 configurable synthetic order count
+Criterion benchmark suite
+synthetic workload benchmarks
+hot-path operation benchmarks
 ```
 
 ## Core Idea
@@ -92,6 +95,9 @@ src/
   error.rs          OrderBookError
   lib.rs            Library exports
   main.rs           CLI demo/simulator entrypoint
+
+benches/
+  order_book_bench.rs  Criterion benchmarks for workloads and hot paths
 ```
 
 The public library exports common types and helpers from `lib.rs`, so users can
@@ -201,6 +207,31 @@ Deterministic means the same config creates the same sequence every time. That
 is useful before adding randomness because tests and benchmark comparisons stay
 stable.
 
+### Benchmarks
+
+Benchmarks measure both full workloads and individual hot-path operations.
+
+Full workload benchmarks:
+
+```text
+two_sided_1000_orders
+crossing_1000_orders
+```
+
+Hot-path benchmarks:
+
+```text
+add_one_resting_order
+single_trade
+multi_level_sweep
+cancel_order
+modify_order
+```
+
+The full workload benchmarks show end-to-end scenario cost. The hot-path
+benchmarks isolate specific order book operations so later optimizations have a
+clear baseline.
+
 ## Run
 
 Run tests:
@@ -248,6 +279,12 @@ Replay saved events:
 
 ```bash
 cargo run -- --replay-events events.json
+```
+
+Run benchmarks:
+
+```bash
+cargo bench
 ```
 
 ## Synthetic Examples
@@ -314,7 +351,7 @@ Phase 11: HFT-style optimization
 Next phase:
 
 ```text
-Phase 8: Benchmarks
+Phase 9: Windmill orchestration
 ```
 
 Detailed roadmap:
