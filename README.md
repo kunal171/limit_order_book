@@ -12,7 +12,7 @@ experiments.
 Completed through:
 
 ```text
-Phase 6: Market data metrics
+Phase 7: Synthetic order generator
 ```
 
 Implemented so far:
@@ -38,6 +38,9 @@ JSON simulator output
 book metrics
 trade metrics
 order book imbalance
+deterministic two-sided synthetic order generation
+deterministic crossing synthetic order generation
+configurable synthetic order count
 ```
 
 ## Core Idea
@@ -81,6 +84,7 @@ src/
     replay.rs       Rebuild book state from events
 
   simulator/
+    generator.rs    Deterministic synthetic order generators
     scenario.rs     ScenarioCommand input enum
     scenarios.rs    Predefined market scenarios
     runner.rs       Runs scenario commands against a fresh book
@@ -177,6 +181,26 @@ VWAP means volume-weighted average price:
 total traded notional / total traded quantity
 ```
 
+### Synthetic Workloads
+
+Synthetic generators create repeatable order flows for testing, metrics, replay,
+and later benchmarks.
+
+The current generators are deterministic:
+
+```text
+synthetic
+-> creates a two-sided resting book without trades
+
+synthetic-crossing
+-> builds ask liquidity and then sends crossing buy orders
+-> creates trades and execution metrics
+```
+
+Deterministic means the same config creates the same sequence every time. That
+is useful before adding randomness because tests and benchmark comparisons stay
+stable.
+
 ## Run
 
 Run tests:
@@ -204,6 +228,8 @@ cargo run -- simple-cross
 cargo run -- buy-sweeps-asks
 cargo run -- cancel-and-modify
 cargo run -- two-sided-book
+cargo run -- synthetic --count 100
+cargo run -- synthetic-crossing --count 100
 ```
 
 Print simulator output as JSON:
@@ -223,6 +249,28 @@ Replay saved events:
 ```bash
 cargo run -- --replay-events events.json
 ```
+
+## Synthetic Examples
+
+Build a two-sided resting book:
+
+```bash
+cargo run -- synthetic --count 20
+```
+
+This creates buy orders below the base price and sell orders above the base
+price. It is useful for book metrics such as spread, mid price, depth, and
+imbalance.
+
+Generate trades:
+
+```bash
+cargo run -- synthetic-crossing --count 20
+```
+
+This first builds ask liquidity, then sends buy orders that cross the spread.
+It is useful for trade metrics such as traded quantity, notional, last trade
+price, and VWAP.
 
 ## Example Metrics
 
@@ -266,7 +314,7 @@ Phase 11: HFT-style optimization
 Next phase:
 
 ```text
-Phase 7: Synthetic order generator
+Phase 8: Benchmarks
 ```
 
 Detailed roadmap:
