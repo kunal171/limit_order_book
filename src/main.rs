@@ -1,4 +1,6 @@
-use limit_order_book::simulator::{run_scenario, scenarios};
+use limit_order_book::simulator::{
+    GeneratorConfig, generate_two_sided_orders, run_scenario, scenarios,
+};
 use limit_order_book::{
     BookEvent, calculate_book_metrics, calculate_trade_metrics, load_events_from_file,
     replay_events, save_events_to_file,
@@ -17,6 +19,14 @@ fn main() {
         .unwrap_or_else(|| "simple-cross".to_string());
 
     let output_json = args.iter().any(|arg| arg == "--json");
+
+    // Optional synthetic order count.
+    // Example: cargo run -- synthetic --count 100
+    let synthetic_count = args
+        .windows(2)
+        .find(|window| window[0] == "--count")
+        .and_then(|window| window[1].parse::<usize>().ok())
+        .unwrap_or(100);
 
     let save_events_path = args
         .windows(2)
@@ -65,6 +75,14 @@ fn main() {
         "buy-sweeps-asks" => scenarios::buy_sweeps_asks(),
         "cancel-and-modify" => scenarios::cancel_and_modify_flow(),
         "two-sided-book" => scenarios::two_sided_book(),
+        "synthetic" => generate_two_sided_orders(GeneratorConfig {
+            order_count: synthetic_count,
+            start_order_id: 1,
+            base_price: 100,
+            tick_size: 1,
+            price_levels: 10,
+            quantity: 5,
+        }),
         _ => {
             eprintln!("unknown scenario: {scenario_name}");
             eprintln!("available scenarios:");
@@ -72,6 +90,7 @@ fn main() {
             eprintln!("  buy-sweeps-asks");
             eprintln!("  cancel-and-modify");
             eprintln!("  two-sided-book");
+            eprintln!("  synthetic");
             std::process::exit(1);
         }
     };
