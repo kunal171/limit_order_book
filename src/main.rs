@@ -59,7 +59,6 @@ fn main() {
         //Calculate Book Metrics
         let book_metrics = calculate_book_metrics(&book.snapshot());
 
-
         //Fetch Trades from the events
         let trades = events
             .iter()
@@ -128,14 +127,15 @@ fn main() {
         fs::create_dir_all(output_dir).expect("failed to create output directory");
 
         //Save all events for replay/Debugging
-        save_events_to_file(&result.events, Path::new(output_dir).join("evens.json"))
+        save_events_to_file(&result.events, Path::new(output_dir).join("events.json"))
             .expect("failed to save events artifacts");
 
-         // Save final book snapshot.
+        // Save final book snapshot.
         write_json_file(
             Path::new(output_dir).join("snapshot.json"),
             &result.book.snapshot(),
-        ).expect("failed to save snapshot artifacts");
+        )
+        .expect("failed to save snapshot artifacts");
 
         // Save small summary that Windmill/CI/AI can read quickly.
         let summary = json!({
@@ -233,7 +233,6 @@ fn main() {
     println!("metrics: {:?}", book_metrics);
     println!("trade metrics: {:?}", trade_metrics);
 }
-
 
 fn write_json_file<T: serde::Serialize>(
     path: impl AsRef<Path>,
