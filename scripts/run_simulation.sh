@@ -15,8 +15,16 @@ if [ ! -x "./target/release/limit_order_book" ]; then
   cargo build --release
 fi
 
-# Run the simulation and write artifacts.
+# Make sure the output directory exists before writing run.log.
+mkdir -p "$OUTPUT_DIR"
+
+# Run the simulation and save verbose output to run.log.
+# Windmill should receive only the small summary JSON on stdout.
 ./target/release/limit_order_book "$SCENARIO" \
   --count "$COUNT" \
   --output-dir "$OUTPUT_DIR" \
-  --json
+  > "$OUTPUT_DIR/run.log"
+
+# Print only the summary JSON.
+# This becomes the clean Windmill job result.
+cat "$OUTPUT_DIR/summary.json"

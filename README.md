@@ -13,6 +13,7 @@ Completed through:
 
 ```text
 Phase 8: Benchmarks
+Phase 9: Windmill orchestration prep in progress
 ```
 
 Implemented so far:
@@ -44,6 +45,8 @@ configurable synthetic order count
 Criterion benchmark suite
 synthetic workload benchmarks
 hot-path operation benchmarks
+run artifact output directory
+release-friendly simulation wrapper script
 ```
 
 ## Core Idea
@@ -98,6 +101,9 @@ src/
 
 benches/
   order_book_bench.rs  Criterion benchmarks for workloads and hot paths
+
+scripts/
+  run_simulation.sh    Release-friendly wrapper for orchestration tools
 ```
 
 The public library exports common types and helpers from `lib.rs`, so users can
@@ -281,11 +287,66 @@ Replay saved events:
 cargo run -- --replay-events events.json
 ```
 
+Write run artifacts:
+
+```bash
+cargo run -- synthetic-crossing --count 100 --output-dir runs/run-001
+```
+
+This creates:
+
+```text
+runs/run-001/events.json
+runs/run-001/snapshot.json
+runs/run-001/summary.json
+```
+
+`events.json` stores the full event stream for replay/debugging.
+`snapshot.json` stores the final order book state.
+`summary.json` stores small metrics that tools can read quickly.
+
 Run benchmarks:
 
 ```bash
 cargo bench
 ```
+
+## Orchestration Wrapper
+
+Build the release binary:
+
+```bash
+cargo build --release
+```
+
+Run a simulation through the wrapper:
+
+```bash
+./scripts/run_simulation.sh synthetic-crossing 100 runs/windmill-test
+```
+
+The wrapper:
+
+```text
+uses target/release/limit_order_book
+creates the output directory
+writes verbose command output to run.log
+prints only summary.json to stdout
+```
+
+Generated files:
+
+```text
+runs/windmill-test/events.json
+runs/windmill-test/run.log
+runs/windmill-test/snapshot.json
+runs/windmill-test/summary.json
+```
+
+This is useful for Windmill, CI, local automation, and later AI analysis. The
+matching engine remains independent from orchestration code.
+
+Generated run folders under `runs/` are ignored by Git.
 
 ## Synthetic Examples
 
@@ -308,6 +369,10 @@ cargo run -- synthetic-crossing --count 20
 This first builds ask liquidity, then sends buy orders that cross the spread.
 It is useful for trade metrics such as traded quantity, notional, last trade
 price, and VWAP.
+
+For crossing scenarios, the final `snapshot.json` may be empty because all
+resting orders can be fully matched. Use `events.json` to inspect what happened
+during the run.
 
 ## Example Metrics
 
