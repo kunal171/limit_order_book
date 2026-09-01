@@ -13,6 +13,7 @@ Completed through:
 
 ```text
 Phase 8: Benchmarks
+Phase 9: Windmill orchestration in progress
 ```
 
 Implemented so far:
@@ -44,6 +45,11 @@ configurable synthetic order count
 Criterion benchmark suite
 synthetic workload benchmarks
 hot-path operation benchmarks
+run artifact output directory
+release-friendly simulation wrapper script
+auto timestamped run directories
+Windmill manual run verified
+Windmill scheduled run verified
 ```
 
 ## Core Idea
@@ -98,6 +104,9 @@ src/
 
 benches/
   order_book_bench.rs  Criterion benchmarks for workloads and hot paths
+
+scripts/
+  run_simulation.sh    Release-friendly wrapper for orchestration tools
 ```
 
 The public library exports common types and helpers from `lib.rs`, so users can
@@ -281,10 +290,138 @@ Replay saved events:
 cargo run -- --replay-events events.json
 ```
 
+Write run artifacts:
+
+```bash
+cargo run -- synthetic-crossing --count 100 --output-dir runs/run-001
+```
+
+This creates:
+
+```text
+runs/run-001/events.json
+runs/run-001/snapshot.json
+runs/run-001/summary.json
+```
+
+`events.json` stores the full event stream for replay/debugging.
+`snapshot.json` stores the final order book state.
+`summary.json` stores small metrics that tools can read quickly.
+
 Run benchmarks:
 
 ```bash
 cargo bench
+```
+
+## Orchestration Wrapper
+
+Build the release binary:
+
+```bash
+cargo build --release
+```
+
+Run a simulation through the wrapper:
+
+```bash
+./scripts/run_simulation.sh synthetic-crossing 100 runs/windmill-test
+```
+
+Create a fresh timestamped output folder automatically:
+
+```bash
+./scripts/run_simulation.sh synthetic-crossing 100 auto
+```
+
+Choose a custom prefix for automatically created folders:
+
+```bash
+RUN_PREFIX=windmill-scheduled ./scripts/run_simulation.sh synthetic-crossing 100 auto
+```
+
+The wrapper:
+
+```text
+uses target/release/limit_order_book
+creates the output directory
+writes each auto run to a fresh timestamped folder
+writes verbose command output to run.log
+prints only summary.json to stdout
+```
+
+Generated files:
+
+```text
+runs/windmill-test/events.json
+runs/windmill-test/run.log
+runs/windmill-test/snapshot.json
+runs/windmill-test/summary.json
+```
+
+This is useful for Windmill, CI, local automation, and later AI analysis. The
+matching engine remains independent from orchestration code.
+
+Generated run folders under `runs/` are ignored by Git.
+
+## Windmill Usage
+
+The current Windmill integration runs the Rust engine as an external job. The
+Windmill script changes into the mounted project directory, calls the wrapper,
+and returns only `summary.json` as the job result.
+
+Use this Bash script in Windmill:
+
+```bash
+scenario="$1"
+count="$2"
+output_dir="$3"
+
+# Trim spaces/newlines from Windmill inputs.
+scenario="$(echo "$scenario" | xargs)"
+count="$(echo "$count" | xargs)"
+output_dir="$(echo "$output_dir" | xargs)"
+
+# Defaults if the user leaves inputs empty.
+scenario="${scenario:-synthetic-crossing}"
+count="${count:-100}"
+output_dir="${output_dir:-auto}"
+
+cd /workspace/limit_order_book
+
+RUN_PREFIX=windmill-scheduled ./scripts/run_simulation.sh "$scenario" "$count" "$output_dir"
+```
+
+Recommended Windmill inputs:
+
+```text
+scenario: synthetic-crossing
+count: 100
+output_dir: auto
+```
+
+Why `output_dir: auto` matters:
+
+```text
+fixed folder -> every scheduled run overwrites the previous artifacts
+auto folder  -> every scheduled run gets a fresh timestamped folder
+```
+
+For Windmill schedules, use a six-field cron expression. The first field is
+seconds:
+
+```text
+*/5 * * * * *   every 5 seconds
+0 */5 * * * *   every 5 minutes
+```
+
+Verified scheduled runs create folders like:
+
+```text
+runs/windmill-scheduled-20260901-171000/events.json
+runs/windmill-scheduled-20260901-171000/run.log
+runs/windmill-scheduled-20260901-171000/snapshot.json
+runs/windmill-scheduled-20260901-171000/summary.json
 ```
 
 ## Synthetic Examples
@@ -308,6 +445,10 @@ cargo run -- synthetic-crossing --count 20
 This first builds ask liquidity, then sends buy orders that cross the spread.
 It is useful for trade metrics such as traded quantity, notional, last trade
 price, and VWAP.
+
+For crossing scenarios, the final `snapshot.json` may be empty because all
+resting orders can be fully matched. Use `events.json` to inspect what happened
+during the run.
 
 ## Example Metrics
 

@@ -6,7 +6,11 @@ use limit_order_book::{
     replay_events, save_events_to_file,
 };
 use serde_json::json;
-use std::env;
+use std::{
+    env,
+    fs::{self, File},
+    path::Path,
+};
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -36,6 +40,14 @@ fn main() {
     let replay_events_path = args
         .windows(2)
         .find(|window| window[0] == "--replay-events")
+        .map(|window| window[1].clone());
+
+    // Optional output directory for run artifacts.
+    // Example:
+    // cargo run -- synthetic-crossing --count 100 --output-dir runs/run-001
+    let output_dir = args
+        .windows(2)
+        .find(|window| window[0] == "--output-dir")
         .map(|window| window[1].clone());
 
     if let Some(path) = replay_events_path {
@@ -110,6 +122,56 @@ fn main() {
     let book_metrics = calculate_book_metrics(&result.book.snapshot());
     let trade_metrics = calculate_trade_metrics(&result.trades);
 
+    if let Some(output_dir) = &output_dir {
+        // Create the run directory if it does not exist.
+        fs::create_dir_all(output_dir).expect("failed to create output directory");
+
+        //Save all events for replay/Debugging
+        save_events_to_file(&result.events, Path::new(output_dir).join("events.json"))
+            .expect("failed to save events artifacts");
+
+        // Save final book snapshot.
+        write_json_file(
+            Path::new(output_dir).join("snapshot.json"),
+            &result.book.snapshot(),
+        )
+        .expect("failed to save snapshot artifacts");
+
+        // Save small summary that Windmill/CI/AI can read quickly.
+        let summary = json!({
+            "scenario": scenario_name,
+            "order_count": synthetic_count,
+            "best_bid": result.book.best_bid(),
+            "best_ask": result.book.best_ask(),
+            "resting_orders": result.book.resting_order_count(),
+            "book_metrics": {
+                "best_bid": book_metrics.best_bid,
+                "best_ask": book_metrics.best_ask,
+                "spread": book_metrics.spread,
+                "mid_price": book_metrics.mid_price,
+                "total_bid_quantity": book_metrics.total_bid_quantity,
+                "total_ask_quantity": book_metrics.total_ask_quantity,
+                "bid_price_levels": book_metrics.bid_price_levels,
+                "ask_price_levels": book_metrics.ask_price_levels,
+                "imbalance": book_metrics.imbalance,
+            },
+            "trade_metrics": {
+                "trade_count": trade_metrics.trade_count,
+                "total_traded_quantity": trade_metrics.total_traded_quantity,
+                "total_notional": trade_metrics.total_notional,
+                "last_trade_price": trade_metrics.last_trade_price,
+                "vwap": trade_metrics.vwap,
+            }
+        });
+
+        write_json_file(Path::new(output_dir).join("summary.json"), &summary)
+            .expect("failed to save summary artifact");
+
+        if !output_json {
+            println!("saved run artifacts to: {output_dir}");
+        }
+    }
+
     if let Some(path) = &save_events_path {
         save_events_to_file(&result.events, path).expect("failed to save events");
 
@@ -170,4 +232,17 @@ fn main() {
     println!("snapshot: {:?}", result.book.snapshot());
     println!("metrics: {:?}", book_metrics);
     println!("trade metrics: {:?}", trade_metrics);
+}
+
+fn write_json_file<T: serde::Serialize>(
+    path: impl AsRef<Path>,
+    value: &T,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Create the output file.
+    let file = File::create(path)?;
+
+    // Write pretty JSON so humans and tools can read it.
+    serde_json::to_writer_pretty(file, value)?;
+
+    Ok(())
 }
