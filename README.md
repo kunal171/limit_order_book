@@ -13,7 +13,7 @@ Completed through:
 
 ```text
 Phase 8: Benchmarks
-Phase 9: Windmill orchestration prep in progress
+Phase 9: Windmill orchestration in progress
 ```
 
 Implemented so far:
@@ -47,6 +47,9 @@ synthetic workload benchmarks
 hot-path operation benchmarks
 run artifact output directory
 release-friendly simulation wrapper script
+auto timestamped run directories
+Windmill manual run verified
+Windmill scheduled run verified
 ```
 
 ## Core Idea
@@ -325,11 +328,24 @@ Run a simulation through the wrapper:
 ./scripts/run_simulation.sh synthetic-crossing 100 runs/windmill-test
 ```
 
+Create a fresh timestamped output folder automatically:
+
+```bash
+./scripts/run_simulation.sh synthetic-crossing 100 auto
+```
+
+Choose a custom prefix for automatically created folders:
+
+```bash
+RUN_PREFIX=windmill-scheduled ./scripts/run_simulation.sh synthetic-crossing 100 auto
+```
+
 The wrapper:
 
 ```text
 uses target/release/limit_order_book
 creates the output directory
+writes each auto run to a fresh timestamped folder
 writes verbose command output to run.log
 prints only summary.json to stdout
 ```
@@ -347,6 +363,66 @@ This is useful for Windmill, CI, local automation, and later AI analysis. The
 matching engine remains independent from orchestration code.
 
 Generated run folders under `runs/` are ignored by Git.
+
+## Windmill Usage
+
+The current Windmill integration runs the Rust engine as an external job. The
+Windmill script changes into the mounted project directory, calls the wrapper,
+and returns only `summary.json` as the job result.
+
+Use this Bash script in Windmill:
+
+```bash
+scenario="$1"
+count="$2"
+output_dir="$3"
+
+# Trim spaces/newlines from Windmill inputs.
+scenario="$(echo "$scenario" | xargs)"
+count="$(echo "$count" | xargs)"
+output_dir="$(echo "$output_dir" | xargs)"
+
+# Defaults if the user leaves inputs empty.
+scenario="${scenario:-synthetic-crossing}"
+count="${count:-100}"
+output_dir="${output_dir:-auto}"
+
+cd /workspace/limit_order_book
+
+RUN_PREFIX=windmill-scheduled ./scripts/run_simulation.sh "$scenario" "$count" "$output_dir"
+```
+
+Recommended Windmill inputs:
+
+```text
+scenario: synthetic-crossing
+count: 100
+output_dir: auto
+```
+
+Why `output_dir: auto` matters:
+
+```text
+fixed folder -> every scheduled run overwrites the previous artifacts
+auto folder  -> every scheduled run gets a fresh timestamped folder
+```
+
+For Windmill schedules, use a six-field cron expression. The first field is
+seconds:
+
+```text
+*/5 * * * * *   every 5 seconds
+0 */5 * * * *   every 5 minutes
+```
+
+Verified scheduled runs create folders like:
+
+```text
+runs/windmill-scheduled-20260901-171000/events.json
+runs/windmill-scheduled-20260901-171000/run.log
+runs/windmill-scheduled-20260901-171000/snapshot.json
+runs/windmill-scheduled-20260901-171000/summary.json
+```
 
 ## Synthetic Examples
 

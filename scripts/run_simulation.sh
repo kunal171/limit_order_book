@@ -7,8 +7,14 @@ SCENARIO="${1:-synthetic-crossing}"
 # Number of synthetic orders, default is 100.
 COUNT="${2:-100}"
 
-# Output directory, default is a timestamped run folder.
-OUTPUT_DIR="${3:-runs/run-$(date +%Y%m%d-%H%M%S)}"
+# Output directory.
+# Pass "auto" from schedulers like Windmill to avoid overwriting older runs.
+OUTPUT_DIR="${3:-auto}"
+
+if [ -z "$OUTPUT_DIR" ] || [ "$OUTPUT_DIR" = "auto" ]; then
+  RUN_PREFIX="${RUN_PREFIX:-run}"
+  OUTPUT_DIR="runs/${RUN_PREFIX}-$(date +%Y%m%d-%H%M%S)"
+fi
 
 # Build release binary if it does not exist yet.
 if [ ! -x "./target/release/limit_order_book" ]; then
