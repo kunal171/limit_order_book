@@ -89,3 +89,41 @@ def build_report(summary, events, snapshot):
     ])
 
     return "\n".join(lines)
+
+def interpret(summary, events, snapshot):
+    # This is deterministic analysis.
+    # Later LangChain/LangGraph can use this same data as context.
+    trade_metrics = summary.get("trade_metrics", {})
+    trade_count = trade_metrics.get("trade_count", 0)
+    resting_orders = summary.get("resting_orders", 0)
+
+    if trade_count == 0:
+        return "No trades were produced. This scenario mainly tested resting liquidity and book shape."
+
+    if resting_orders == 0:
+        return "All resting liquidity was consumed by crossing orders. This is expected for aggressive crossing scenarios."
+
+    return "The run produced trades and left some liquidity resting in the book."
+
+def main():
+    # Require the user to pass a run directory.
+    if len(sys.argv) != 2:
+        print("usage: python3 ai/analyze_run.py runs/<run-folder>")
+        sys.exit(1)
+
+    run_dir = Path(sys.argv[1])
+
+    summary = load_json(run_dir / "summary.json")
+    events = load_json(run_dir / "events.json")
+    snapshot = load_json(run_dir / "snapshot.json")
+
+    report = build_report(summary, events, snapshot)
+
+    output_path = run_dir / "analysis.md"
+    output_path.write_text(report, encoding="utf-8")
+
+    print(f"analysis written to: {output_path}")
+
+
+if __name__ == "__main__":
+    main()
