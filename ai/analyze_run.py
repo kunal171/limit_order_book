@@ -34,6 +34,13 @@ def count_events(events):
 
     return counts
 
+def display_value(value):
+    #Convert Python None into cleaner report text.
+    if value is None:
+        return "not available"
+
+    return value
+
 def build_report(summary, events, snapshot):
     #Pull important values from summary.json.
 
@@ -59,19 +66,19 @@ def build_report(summary, events, snapshot):
         "",
         "## Book Metrics",
         "",
-        f"- Best bid: `{book_metrics.get('best_bid')}`",
-        f"- Best ask: `{book_metrics.get('best_ask')}`",
-        f"- Spread: `{book_metrics.get('spread')}`",
-        f"- Mid price: `{book_metrics.get('mid_price')}`",
-        f"- Imbalance: `{book_metrics.get('imbalance')}`",
+        f"- Best bid: `{display_value(book_metrics.get('best_bid'))}`",
+        f"- Best ask: `{display_value(book_metrics.get('best_ask'))}`",
+        f"- Spread: `{display_value(book_metrics.get('spread'))}`",
+        f"- Mid price: `{display_value(book_metrics.get('mid_price'))}`",
+        f"- Imbalance: `{display_value(book_metrics.get('imbalance'))}`",
         "",
         "## Trade Metrics",
         "",
-        f"- Trade count: `{trade_metrics.get('trade_count')}`",
-        f"- Total traded quantity: `{trade_metrics.get('total_traded_quantity')}`",
-        f"- Total notional: `{trade_metrics.get('total_notional')}`",
-        f"- Last trade price: `{trade_metrics.get('last_trade_price')}`",
-        f"- VWAP: `{trade_metrics.get('vwap')}`",
+        f"- Trade count: `{display_value(trade_metrics.get('trade_count'))}`",
+        f"- Total traded quantity: `{display_value(trade_metrics.get('total_traded_quantity'))}`",
+        f"- Total notional: `{display_value(trade_metrics.get('total_notional'))}`",
+        f"- Last trade price: `{display_value(trade_metrics.get('last_trade_price'))}`",
+        f"- VWAP: `{display_value(trade_metrics.get('vwap'))}`",
         "",
         "## Event Counts",
         "",
@@ -93,17 +100,36 @@ def build_report(summary, events, snapshot):
 def interpret(summary, events, snapshot):
     # This is deterministic analysis.
     # Later LangChain/LangGraph can use this same data as context.
+    findings = []
+
+    book_metrics = summary.get("book_metrics", {})
     trade_metrics = summary.get("trade_metrics", {})
+
+
     trade_count = trade_metrics.get("trade_count", 0)
     resting_orders = summary.get("resting_orders", 0)
+    spread = book_metrics.get("spread")
+    vwap = trade_metrics.get("vwap")
 
     if trade_count == 0:
-        return "No trades were produced. This scenario mainly tested resting liquidity and book shape."
+        findings.append("- No trades were produced. This run mainly tested resting book liquidity.")
+    else:
+        findings.append(f"- The run produced `{trade_count}` trades.")
 
     if resting_orders == 0:
-        return "All resting liquidity was consumed by crossing orders. This is expected for aggressive crossing scenarios."
+        findings.append("- No resting orders remain, so all visible liquidity was consumed or no liquidity rested.")
+    else:
+        findings.append(f"- `{resting_orders}` orders remain resting in the final book.")
 
-    return "The run produced trades and left some liquidity resting in the book."
+    if spread is None:
+        findings.append("- Spread is not available because one or both sides of the book are empty.")
+    else:
+        findings.append(f"- Final spread is `{spread}` ticks.")
+
+    if vwap is not None:
+        findings.append(f"- VWAP is `{vwap}`, which summarizes the average executed price weighted by quantity.")
+
+    return "\n".join(findings)
 
 def main():
     # Require the user to pass a run directory.
