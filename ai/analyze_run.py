@@ -131,6 +131,22 @@ def interpret(summary, events, snapshot):
 
     return "\n".join(findings)
 
+def validate_run_dir(run_dir: Path):
+    # Validate that the user passed a real run directory.
+    if not run_dir.exists():
+        raise FileNotFoundError(f"run directory does not exist: {run_dir}")
+
+    if not run_dir.is_dir():
+        raise NotADirectoryError(f"path is not a directory: {run_dir}")
+
+    required_files = ["summary.json", "events.json", "snapshot.json"]
+
+    for file_name in required_files:
+        file_path = run_dir / file_name
+
+        if not file_path.exists():
+            raise FileNotFoundError(f"missing required run artifact: {file_path}")
+
 def main():
     # Require the user to pass a run directory.
     if len(sys.argv) != 2:
@@ -138,6 +154,7 @@ def main():
         sys.exit(1)
 
     run_dir = Path(sys.argv[1])
+    validate_run_dir(run_dir)
 
     summary = load_json(run_dir / "summary.json")
     events = load_json(run_dir / "events.json")
