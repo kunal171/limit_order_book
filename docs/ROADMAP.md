@@ -9,10 +9,10 @@ Rust matching engine
 -> correctness tests
 -> replay/simulator
 -> benchmarks
+-> Windmill orchestration/dashboard
+-> HFT-style systems and optimization
 -> AI analysis layer
 -> LangGraph experiment workflows
--> Windmill orchestration/dashboard
--> advanced HFT-style optimization
 ```
 
 Important project rule:
@@ -66,7 +66,8 @@ phase-06-benchmarks
 phase-07-ai-langchain
 phase-08-langgraph-agent
 phase-09-windmill-integration
-phase-10-hft-optimization
+phase-10-ai-analysis-foundation
+phase-11-hft-systems
 ```
 
 ## Current Starting Point
@@ -479,6 +480,12 @@ Branch:
 phase-07-ai-langchain
 ```
 
+Status:
+
+```text
+paused after deterministic analysis foundation
+```
+
 Goal:
 
 ```text
@@ -534,12 +541,24 @@ AI can explain an order from logs/events
 AI uses tools or structured data instead of guessing
 ```
 
+Pause notes:
+
+```text
+docs/AI_WORK_PAUSE.md
+```
+
 ## Phase 8: LangGraph Research Agent
 
 Branch:
 
 ```text
 phase-08-langgraph-agent
+```
+
+Status:
+
+```text
+deferred until after HFT/system-strengthening work
 ```
 
 Goal:
@@ -656,12 +675,54 @@ Windmill can show or link to results
 AI report can be part of a Windmill flow
 ```
 
-## Phase 10: Advanced HFT Optimization
+## Phase 10: AI Analysis Foundation
 
 Branch:
 
 ```text
-phase-10-hft-optimization
+phase-10-ai-langgraph-analysis
+```
+
+Status:
+
+```text
+paused
+```
+
+What exists:
+
+```text
+deterministic Python analyzer
+run-and-analyze shell wrapper
+AI module README
+pause/resume documentation
+```
+
+Pause notes:
+
+```text
+docs/AI_WORK_PAUSE.md
+```
+
+Why pause:
+
+```text
+The Rust matching engine should become a stronger low-latency systems project
+before we continue with LLM/LangGraph work.
+```
+
+## Phase 11: HFT-Style Systems And Optimization
+
+Branch:
+
+```text
+phase-11-hft-systems
+```
+
+Current priority:
+
+```text
+resume here before continuing LangChain/LangGraph
 ```
 
 Goal:
@@ -727,6 +788,12 @@ correctness tests still pass
 trade-offs are documented
 ```
 
+Detailed HFT roadmap:
+
+```text
+docs/HFT_ROADMAP.md
+```
+
 ## Phase Merge Checklist
 
 Before merging any phase branch:
@@ -753,7 +820,8 @@ phase 06: add benchmark baseline
 phase 07: add AI run analysis
 phase 08: add LangGraph experiment workflow
 phase 09: add Windmill orchestration
-phase 10: add HFT optimization pass
+phase 10: pause AI foundation and document resume plan
+phase 11: add HFT-style systems improvements
 ```
 
 ## Learning Rule For This Project

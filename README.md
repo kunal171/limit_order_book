@@ -14,6 +14,7 @@ Completed through:
 ```text
 Phase 8: Benchmarks
 Phase 9: Windmill orchestration in progress
+Phase 10: AI analysis foundation paused
 ```
 
 Implemented so far:
@@ -50,6 +51,8 @@ release-friendly simulation wrapper script
 auto timestamped run directories
 Windmill manual run verified
 Windmill scheduled run verified
+deterministic AI analysis script
+combined run-and-analyze wrapper
 ```
 
 ## Core Idea
@@ -68,6 +71,10 @@ incoming order
 AI, Windmill, databases, dashboards, and reports stay outside the matching hot
 path. They are useful for orchestration and analysis, but the core book should
 remain deterministic and easy to replay.
+
+The current active direction is HFT-style systems work. AI integration is paused
+until the matching engine has stronger performance baselines and cleaner
+hot-path boundaries.
 
 ## Architecture
 
@@ -107,6 +114,12 @@ benches/
 
 scripts/
   run_simulation.sh    Release-friendly wrapper for orchestration tools
+  analyze_run.sh       Runs deterministic analysis for one run directory
+  run_and_analyze.sh   Runs simulation, analysis, and prints clean JSON
+
+ai/
+  analyze_run.py       Reads run artifacts and writes analysis.md
+  README.md            AI module scope and usage
 ```
 
 The public library exports common types and helpers from `lib.rs`, so users can
@@ -364,6 +377,53 @@ matching engine remains independent from orchestration code.
 
 Generated run folders under `runs/` are ignored by Git.
 
+## AI Analysis Status
+
+AI integration is paused while the project shifts toward HFT-style systems work.
+
+What exists today:
+
+```text
+ai/analyze_run.py
+scripts/analyze_run.sh
+scripts/run_and_analyze.sh
+```
+
+The current AI-facing work is deterministic. It reads saved artifacts such as
+`summary.json`, `events.json`, and `snapshot.json`, then writes `analysis.md`.
+It does not call an LLM yet.
+
+Pause/resume notes:
+
+```text
+docs/AI_WORK_PAUSE.md
+```
+
+## HFT-Style Roadmap
+
+The next work is focused on making the engine a stronger low-latency systems
+project.
+
+Main priorities:
+
+```text
+record benchmark baselines
+separate the matching hot path from optional event logging
+make event storage configurable and bounded
+improve cancel/modify indexes
+measure latency percentiles
+reduce allocations and cloning
+compare BTreeMap with alternate price-ladder designs
+add single-writer command processing
+keep AI/Windmill outside the hot path
+```
+
+Detailed roadmap:
+
+```text
+docs/HFT_ROADMAP.md
+```
+
 ## Windmill Usage
 
 The current Windmill integration runs the Rust engine as an external job. The
@@ -485,20 +545,21 @@ Phase 6: Market data metrics
 Phase 7: Synthetic order generator
 Phase 8: Benchmarks
 Phase 9: Windmill orchestration
-Phase 10: AI/LangChain/LangGraph analysis
-Phase 11: HFT-style optimization
+Phase 10: AI/LangChain/LangGraph analysis foundation paused
+Phase 11: HFT-style systems and optimization
 ```
 
-Next phase:
+Next focus:
 
 ```text
-Phase 9: Windmill orchestration
+Phase 11: HFT-style systems and optimization
 ```
 
 Detailed roadmap:
 
 ```text
 docs/ROADMAP.md
+docs/HFT_ROADMAP.md
 ```
 
 ## Long-Term Direction
@@ -511,10 +572,9 @@ Rust matching engine
 -> market data metrics
 -> synthetic workloads
 -> benchmark reports
--> AI scenario analysis
--> LangGraph research workflows
--> Windmill scheduled runs and dashboards
 -> HFT-style optimization experiments
+-> Windmill scheduled runs and dashboards
+-> AI scenario analysis and LangGraph research workflows
 ```
 
 The hot path remains Rust-only.

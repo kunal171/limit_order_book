@@ -1,5 +1,16 @@
 # AI Analysis Module
 
+Status: paused.
+
+The AI foundation exists and is documented, but active work is paused while the
+project shifts toward HFT-style systems improvements.
+
+Resume notes:
+
+```text
+docs/AI_WORK_PAUSE.md
+```
+
 This folder contains the first AI-facing layer for the limit order book project.
 
 The Rust engine produces deterministic run artifacts. This module reads those
@@ -77,7 +88,7 @@ helpers, and later LangChain/LangGraph workflows.
 
 ## Next Steps
 
-Planned additions:
+Deferred additions:
 
 ```text
 richer deterministic interpretation
