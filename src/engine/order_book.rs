@@ -618,4 +618,59 @@ mod tests {
         assert_eq!(snapshot.asks[0].0, 103);
         assert_eq!(snapshot.asks[1].0, 105);
     }
+
+    #[test]
+    fn disabled_event_mode_records_no_events() {
+        let mut book = OrderBook::with_config(OrderBookConfig {
+            event_mode: EventMode::Disabled,
+        });
+
+        book.add_order(Order::new(1, Side::Buy, 100, 10))
+            .expect("valid order should be accepted");
+
+        book.cancel_order(1).expect("cancel should succeed");
+
+        assert!(book.events().is_empty());
+    }
+
+    #[test]
+    fn trades_only_event_mode_records_only_trades() {
+        let mut book = OrderBook::with_config(OrderBookConfig {
+            event_mode: EventMode::TradesOnly,
+        });
+        book.add_order(Order::new(1, Side::Buy, 100, 10))
+            .expect("resting order should be accepted");
+
+        book.add_order(Order::new(2, Side::Sell, 100, 4))
+            .expect("crossing order should be accepted");
+
+        assert_eq!(
+            book.events(),
+            &[BookEvent::TradeExecuted {
+                trade: Trade::new(1, 2, 100, 4),
+            }]
+        );
+    }
+
+    #[test]
+    fn full_event_mode_records_all_events() {
+        let mut book = OrderBook::with_config(OrderBookConfig {
+            event_mode: EventMode::Full,
+        });
+
+        book.add_order(Order::new(1, Side::Buy, 100, 10))
+            .expect("valid order should be accepted");
+
+        book.cancel_order(1).expect("cancel should succeed");
+
+        assert_eq!(
+            book.events(),
+            &[
+                BookEvent::OrderAccepted {
+                    order: Order::new(1, Side::Buy, 100, 10),
+                },
+                BookEvent::OrderCancelled { order_id: 1 },
+            ]
+        );
+    }
 }
