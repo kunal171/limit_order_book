@@ -177,7 +177,7 @@ fn bench_deep_cancel_modify(c: &mut Criterion) {
                 // Cancel near the end to expose scan cost.
                 book.cancel_order(black_box(9_999))
                     .expect("cancel should succeed");
-            }, 
+            },
             BatchSize::LargeInput,
         );
     });
@@ -214,8 +214,8 @@ fn bench_multi_symbol_workload(c: &mut Criterion) {
 
             for _ in 0..symbol_count {
                 // Each OrderBook represents one instrument/symbol.
-                let result = run_scenario(black_box(&commands))
-                    .expect("symbol scenario should run");
+                let result =
+                    run_scenario(black_box(&commands)).expect("symbol scenario should run");
                 books.push(result.book);
             }
 
