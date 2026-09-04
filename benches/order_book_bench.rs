@@ -1,9 +1,50 @@
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use limit_order_book::simulator::{
-    GeneratorConfig, generate_crossing_orders, generate_two_sided_orders, run_scenario,
+    GeneratorConfig, ScenarioCommand, generate_crossing_orders, generate_two_sided_orders,
+    run_scenario,
 };
-use limit_order_book::{Order, OrderBook, Side};
+use limit_order_book::{EventMode, Order, OrderBook, OrderBookConfig, Side};
 use std::hint::black_box;
+
+/// Helper Functions
+fn build_deep_book(order_count: u64) -> OrderBook {
+    let mut book = OrderBook::new();
+
+    for id in 1..=order_count {
+        // Same price level creates a deep FIFO queue.
+        // This is intentionally bad for current cancel scanning.
+        book.add_order(Order::new(id, Side::Buy, 100, 10))
+            .expect("setup order should be accepted");
+    }
+
+    book
+}
+
+fn run_commands_with_event_mode(commands: &[ScenarioCommand], event_mode: EventMode) -> OrderBook {
+    let mut book = OrderBook::with_config(OrderBookConfig { event_mode });
+
+    for command in commands {
+        match command {
+            ScenarioCommand::Add(order) => {
+                book.add_order(order.clone())
+                    .expect("order should be accepted");
+            }
+            ScenarioCommand::Cancel { order_id } => {
+                book.cancel_order(*order_id).expect("cancel should succeed");
+            }
+            ScenarioCommand::Modify {
+                order_id,
+                new_price,
+                new_quantity,
+            } => {
+                book.modify_order(*order_id, *new_price, *new_quantity)
+                    .expect("modify should succeed");
+            }
+        }
+    }
+
+    book
+}
 
 fn bench_two_sided_synthetic(c: &mut Criterion) {
     // Pre-generate commands so we measure order book execution,
@@ -156,19 +197,6 @@ fn bench_large_two_sided_books(c: &mut Criterion) {
     }
 }
 
-fn build_deep_book(order_count: u64) -> OrderBook {
-    let mut book = OrderBook::new();
-
-    for id in 1..=order_count {
-        // Same price level creates a deep FIFO queue.
-        // This is intentionally bad for current cancel scanning.
-        book.add_order(Order::new(id, Side::Buy, 100, 10))
-            .expect("setup order should be accepted");
-    }
-
-    book
-}
-
 fn bench_deep_cancel_modify(c: &mut Criterion) {
     c.bench_function("cancel_from_10000_deep_level", |b| {
         b.iter_batched(
@@ -224,6 +252,44 @@ fn bench_multi_symbol_workload(c: &mut Criterion) {
     });
 }
 
+fn bench_event_modes(c: &mut Criterion) {
+    let commands = generate_crossing_orders(GeneratorConfig {
+        order_count: 1_000,
+        start_order_id: 1,
+        base_price: 100,
+        tick_size: 1,
+        price_levels: 10,
+        quantity: 5,
+    });
+
+    c.bench_function("crossing_1000_events_full", |b| {
+        b.iter(|| {
+            black_box(run_commands_with_event_mode(
+                black_box(&commands),
+                EventMode::Full,
+            ));
+        });
+    });
+
+    c.bench_function("crossing_1000_events_trades_only", |b| {
+        b.iter(|| {
+            black_box(run_commands_with_event_mode(
+                black_box(&commands),
+                EventMode::TradesOnly,
+            ));
+        });
+    });
+
+    c.bench_function("crossing_1000_events_disabled", |b| {
+        b.iter(|| {
+            black_box(run_commands_with_event_mode(
+                black_box(&commands),
+                EventMode::Disabled,
+            ));
+        });
+    });
+}
+
 criterion_group!(
     benches,
     bench_two_sided_synthetic,
@@ -231,6 +297,7 @@ criterion_group!(
     bench_hot_path_operations,
     bench_large_two_sided_books,
     bench_deep_cancel_modify,
-    bench_multi_symbol_workload
+    bench_multi_symbol_workload,
+    bench_event_modes
 );
 criterion_main!(benches);
