@@ -8,3 +8,4 @@ mod matching;
 mod order_book;
 
 pub use order_book::OrderBook;
+pub use config::{EventMode, OrderBookConfig};

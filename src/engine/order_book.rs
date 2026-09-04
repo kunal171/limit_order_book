@@ -86,7 +86,7 @@ impl OrderBook {
         self.order_sides.remove(&order_id);
 
         //record cancel
-        self.record_order_canceled(order_id);
+        self.record_order_cancelled(order_id);
 
         Ok(())
     }
@@ -202,7 +202,7 @@ impl OrderBook {
         }
     }
 
-    fn record_order_canceled(&mut self, order_id: OrderId) {
+    fn record_order_cancelled(&mut self, order_id: OrderId) {
         if self.config.event_mode == EventMode::Full {
             self.events.push(BookEvent::OrderCancelled { order_id });
         }
