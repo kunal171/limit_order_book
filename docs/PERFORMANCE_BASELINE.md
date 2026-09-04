@@ -17,7 +17,7 @@ whether the change actually helped.
 ```text
 Date: 2026-09-04
 Branch: phase-11-hft-systems
-Commit: 732bf74
+Commit: 95e3dce
 Project: limit_order_book v0.1.0
 Rust edition: 2024
 Benchmark profile: cargo bench / optimized release benchmark profile
@@ -63,7 +63,7 @@ cargo test
 Result:
 
 ```text
-39 passed
+42 passed
 0 failed
 0 ignored
 0 measured
@@ -104,18 +104,85 @@ Use the middle number as the main baseline estimate.
 
 | Benchmark | Lower | Estimate | Upper | What It Measures |
 | --- | ---: | ---: | ---: | --- |
-| `two_sided_1000_orders` | 57.791 us | 58.861 us | 59.881 us | Runs 1,000 deterministic non-crossing orders |
-| `crossing_1000_orders` | 53.381 us | 53.879 us | 54.379 us | Runs 1,000 deterministic orders that create trades |
-| `add_one_resting_order` | 81.117 ns | 82.705 ns | 84.896 ns | Adds one order that rests in the book |
-| `single_trade` | 104.94 ns | 106.66 ns | 108.42 ns | Matches one crossing order against one resting order |
-| `multi_level_sweep` | 244.02 ns | 249.19 ns | 255.03 ns | Sweeps multiple price levels with one order |
-| `cancel_order` | 106.84 ns | 109.09 ns | 111.57 ns | Cancels one resting order |
-| `modify_order` | 169.09 ns | 176.70 ns | 186.97 ns | Modifies one resting order |
-| `two_sided_10000_orders` | 676.66 us | 695.44 us | 717.79 us | Runs 10,000 deterministic non-crossing orders |
-| `two_sided_100000_orders` | 7.5620 ms | 7.6894 ms | 7.8263 ms | Runs 100,000 deterministic non-crossing orders |
-| `cancel_from_10000_deep_level` | 4.5778 us | 4.7926 us | 5.0213 us | Cancels near the end of a 10,000-order FIFO price level |
-| `modify_from_10000_deep_level` | 5.0434 us | 5.3255 us | 5.6412 us | Modifies near the end of a 10,000-order FIFO price level |
-| `multi_symbol_100x1000_orders` | 8.1417 ms | 8.2719 ms | 8.4149 ms | Runs 100 books with 1,000 orders each |
+| `two_sided_1000_orders` | 54.130 us | 54.422 us | 54.754 us | Runs 1,000 deterministic non-crossing orders |
+| `crossing_1000_orders` | 55.790 us | 58.317 us | 61.072 us | Runs 1,000 deterministic orders that create trades |
+| `add_one_resting_order` | 82.056 ns | 83.538 ns | 85.425 ns | Adds one order that rests in the book |
+| `single_trade` | 104.18 ns | 112.93 ns | 125.15 ns | Matches one crossing order against one resting order |
+| `multi_level_sweep` | 234.73 ns | 240.97 ns | 248.52 ns | Sweeps multiple price levels with one order |
+| `cancel_order` | 102.31 ns | 103.91 ns | 105.49 ns | Cancels one resting order |
+| `modify_order` | 156.69 ns | 159.55 ns | 163.19 ns | Modifies one resting order |
+| `two_sided_10000_orders` | 635.09 us | 649.02 us | 665.09 us | Runs 10,000 deterministic non-crossing orders |
+| `two_sided_100000_orders` | 7.7559 ms | 8.2079 ms | 8.7132 ms | Runs 100,000 deterministic non-crossing orders |
+| `cancel_from_10000_deep_level` | 4.0124 us | 4.0805 us | 4.1527 us | Cancels near the end of a 10,000-order FIFO price level |
+| `modify_from_10000_deep_level` | 4.0671 us | 4.2050 us | 4.3777 us | Modifies near the end of a 10,000-order FIFO price level |
+| `multi_symbol_100x1000_orders` | 7.1372 ms | 7.3221 ms | 7.5349 ms | Runs 100 books with 1,000 orders each |
+
+## How To Read `cargo bench` Output
+
+Example:
+
+```text
+two_sided_1000_orders   time:   [54.130 us 54.422 us 54.754 us]
+                        change: [-5.3404% -4.1267% -2.9448%] (p = 0.00 < 0.05)
+                        Performance has improved.
+```
+
+Meaning:
+
+```text
+two_sided_1000_orders
+name of the benchmark function
+
+time: [54.130 us 54.422 us 54.754 us]
+estimated runtime range from Criterion
+
+54.130 us
+lower bound
+
+54.422 us
+middle estimate, usually the number we track
+
+54.754 us
+upper bound
+
+change: [-5.3404% -4.1267% -2.9448%]
+comparison against previous Criterion history on this same machine
+
+p = 0.00 < 0.05
+Criterion thinks the change is statistically significant
+
+Performance has improved
+the new run was faster than Criterion's previous local baseline
+```
+
+Important:
+
+```text
+lower time is better
+ns is nanoseconds
+us is microseconds
+ms is milliseconds
+1 us = 1,000 ns
+1 ms = 1,000 us
+```
+
+When reading output, focus on:
+
+```text
+1. benchmark name
+2. middle estimate
+3. units: ns/us/ms
+4. change direction
+5. whether Criterion says it is noise or significant
+6. outlier count
+```
+
+Do not overreact to one run:
+
+```text
+small benchmarks can move because of CPU frequency, scheduler noise, thermals,
+background processes, and laptop/desktop power behavior.
+```
 
 ## Throughput Estimate
 
@@ -123,11 +190,11 @@ These are rough estimates from the Criterion middle value.
 
 | Benchmark | Approximate Throughput |
 | --- | ---: |
-| `two_sided_1000_orders` | 16.99 million orders/sec |
-| `crossing_1000_orders` | 18.56 million orders/sec |
-| `two_sided_10000_orders` | 14.38 million orders/sec |
-| `two_sided_100000_orders` | 13.01 million orders/sec |
-| `multi_symbol_100x1000_orders` | 12.09 million orders/sec |
+| `two_sided_1000_orders` | 18.37 million orders/sec |
+| `crossing_1000_orders` | 17.15 million orders/sec |
+| `two_sided_10000_orders` | 15.41 million orders/sec |
+| `two_sided_100000_orders` | 12.18 million orders/sec |
+| `multi_symbol_100x1000_orders` | 13.66 million orders/sec |
 
 Interpretation:
 
@@ -148,13 +215,18 @@ parsing, risk checks, persistence, thread handoff, or p99/p999 latency.
 Criterion also printed local comparison messages:
 
 ```text
-two_sided_1000_orders: No change in performance detected
-crossing_1000_orders: No change in performance detected
-add_one_resting_order: Change within noise threshold
+two_sided_1000_orders: Performance has improved
+crossing_1000_orders: Change within noise threshold
+add_one_resting_order: Performance has regressed
 single_trade: No change in performance detected
-multi_level_sweep: No change in performance detected
-cancel_order: Performance has regressed
-modify_order: Performance has regressed
+multi_level_sweep: Change within noise threshold
+cancel_order: Performance has improved
+modify_order: Performance has improved
+two_sided_10000_orders: Performance has improved
+two_sided_100000_orders: Change within noise threshold
+cancel_from_10000_deep_level: Performance has improved
+modify_from_10000_deep_level: Performance has improved
+multi_symbol_100x1000_orders: Performance has improved
 ```
 
 Important:
@@ -177,9 +249,9 @@ benchmark runs do not become too slow.
 Large workloads:
 
 ```text
-1,000 non-crossing orders: 58.861 us
-10,000 non-crossing orders: 695.44 us
-100,000 non-crossing orders: 7.6894 ms
+1,000 non-crossing orders: 54.422 us
+10,000 non-crossing orders: 649.02 us
+100,000 non-crossing orders: 8.2079 ms
 ```
 
 This is roughly linear, which is a good sign for the current synthetic workload.
@@ -187,8 +259,8 @@ This is roughly linear, which is a good sign for the current synthetic workload.
 Deep cancel/modify:
 
 ```text
-cancel near end of 10,000-order level: 4.7926 us
-modify near end of 10,000-order level: 5.3255 us
+cancel near end of 10,000-order level: 4.0805 us
+modify near end of 10,000-order level: 4.2050 us
 ```
 
 This confirms the expected weakness:
@@ -201,7 +273,7 @@ inside the FIFO queue at that price level.
 Multi-symbol:
 
 ```text
-100 symbols x 1,000 orders: 8.2719 ms
+100 symbols x 1,000 orders: 7.3221 ms
 ```
 
 This is a simple simulation where each symbol is represented by an independent
@@ -224,12 +296,14 @@ BTreeMap is clean and correct, but may not be the fastest price ladder later
 JSON output is useful for tools, but must stay outside the matching hot path
 ```
 
-## First Optimization Target
+## Current Event Mode Status
 
-Next target:
+Event mode config is implemented and tested.
 
 ```text
-make event recording configurable
+EventMode::Full records accepted/cancel/modify/trade events.
+EventMode::TradesOnly records only trade events.
+EventMode::Disabled records no events.
 ```
 
 Why:
@@ -240,7 +314,7 @@ But low-latency benchmarks should not always pay for event clones and an
 unbounded in-memory event log.
 ```
 
-Expected design:
+Current design:
 
 ```text
 OrderBookConfig {
@@ -261,9 +335,15 @@ Disabled mode gives a cleaner hot-path benchmark.
 TradesOnly mode keeps execution output without recording every accepted command.
 ```
 
-## Next Measurement After Optimization
+## Next Measurement
 
-After event recording config is implemented, run:
+Next benchmark target:
+
+```text
+compare EventMode::Full vs EventMode::TradesOnly vs EventMode::Disabled
+```
+
+After event mode comparison benchmarks are added, run:
 
 ```bash
 cargo test
@@ -273,11 +353,11 @@ cargo bench
 Then compare especially:
 
 ```text
-add_one_resting_order
-single_trade
-multi_level_sweep
 crossing_1000_orders
+crossing_1000_events_full
+crossing_1000_events_trades_only
+crossing_1000_events_disabled
 ```
 
-The optimization is only worth keeping if correctness stays the same and the
-benchmark results improve or the trade-off is clearly documented.
+This will tell us how much event cloning and event storage cost in the current
+matching path.
