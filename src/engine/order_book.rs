@@ -85,7 +85,8 @@ impl OrderBook {
 
         self.order_sides.remove(&order_id);
 
-        self.events.push(BookEvent::OrderCancelled { order_id });
+        //record cancel
+        self.record_order_canceled(order_id);
 
         Ok(())
     }
@@ -147,16 +148,11 @@ impl OrderBook {
             Side::Sell => self.match_sell_order(updated_order),
         };
 
-        self.events.push(BookEvent::OrderModified {
-            order_id,
-            new_price,
-            new_quantity,
-        });
+        self.record_order_modified( order_id, new_price, new_quantity);
+
 
         for trade in &trades {
-            self.events.push(BookEvent::TradeExecuted {
-                trade: trade.clone(),
-            });
+            self.record_trade_executed(trade);
         }
 
         Ok(trades)
@@ -204,6 +200,23 @@ impl OrderBook {
                 });
             }
             EventMode::Disabled => {}
+        }
+    }
+
+    fn record_order_canceled(&mut self, order_id: OrderId) {
+        if self.config.event_mode == EventMode::Full {
+            self.events.push(BookEvent::OrderCancelled {
+                order_id,
+            });
+        }
+    }
+    fn record_order_modified(&mut self, order_id: OrderId,  new_price: Price, new_quantity: Quantity, ) {
+        if self.config.event_mode == EventMode::Full {
+            self.events.push(BookEvent::OrderModified {
+                order_id,
+                new_price,
+                new_quantity
+            });
         }
     }
 }

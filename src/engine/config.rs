@@ -1,6 +1,5 @@
 //! src/engine/config.rs
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventMode {
     // Current behavior. Store all events so replay/debugging works.
