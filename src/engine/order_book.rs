@@ -1,5 +1,6 @@
 use crate::Quantity;
 use crate::domain::{BookEvent, BookSnapshot, Order, OrderId, Price, Side, Trade};
+use crate::engine::config::{EventMode, OrderBookConfig};
 use crate::error::OrderBookError;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 
@@ -13,12 +14,23 @@ pub struct OrderBook {
     pub(super) asks: BTreeMap<Price, VecDeque<Order>>,
     pub(super) order_sides: HashMap<OrderId, Side>,
     pub(super) events: Vec<BookEvent>,
+    pub(super) config: OrderBookConfig,
 }
 
 impl OrderBook {
     /// Create an empty book.
     pub fn new() -> Self {
-        Self::default()
+        Self::with_config(OrderBookConfig::default())
+    }
+
+    pub fn with_config(config: OrderBookConfig) -> Self {
+        Self {
+            bids: BTreeMap::new(),
+            asks: BTreeMap::new(),
+            order_sides: HashMap::new(),
+            events: Vec::new(),
+            config,
+        }
     }
 
     /// Add an order and return all trades caused by that order.
@@ -30,10 +42,8 @@ impl OrderBook {
             return Err(OrderBookError::DuplicateOrderId);
         }
 
-        // Clone because matching consumes the order, but the event log also needs it.
-        self.events.push(BookEvent::OrderAccepted {
-            order: order.clone(),
-        });
+        // Record accepted order only if config allows it.
+        self.record_order_accepted(&order);
 
         let trades = match order.side {
             Side::Buy => self.match_buy_order(order),
@@ -41,9 +51,7 @@ impl OrderBook {
         };
 
         for trade in &trades {
-            self.events.push(BookEvent::TradeExecuted {
-                trade: trade.clone(),
-            });
+            self.record_trade_executed(&trade);
         }
         Ok(trades)
     }
@@ -178,6 +186,25 @@ impl OrderBook {
             .collect();
 
         BookSnapshot { bids, asks }
+    }
+
+    fn record_order_accepted(&mut self, order: &Order) {
+        if self.config.event_mode == EventMode::Full {
+            self.events.push(BookEvent::OrderAccepted {
+                order: order.clone(),
+            });
+        }
+    }
+
+    fn record_trade_executed(&mut self, trade: &Trade) {
+        match self.config.event_mode {
+            EventMode::Full | EventMode::TradesOnly => {
+                self.events.push(BookEvent::TradeExecuted {
+                    trade: trade.clone(),
+                });
+            }
+            EventMode::Disabled => {}
+        }
     }
 }
 

@@ -5,5 +5,6 @@
 
 mod matching;
 mod order_book;
+mod config;
 
 pub use order_book::OrderBook;
