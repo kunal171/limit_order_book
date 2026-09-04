@@ -134,10 +134,103 @@ fn bench_hot_path_operations(c: &mut Criterion) {
     });
 }
 
+fn bench_large_two_sided_books(c: &mut Criterion) {
+    // Test bigger resting books before optimizing.
+    // This shows how the current BTreeMap + VecDeque structure scales.
+
+    for order_count in [10_000, 100_000] {
+        let commands = generate_two_sided_orders(GeneratorConfig {
+            order_count,
+            start_order_id: 1,
+            base_price: 100_000,
+            tick_size: 1,
+            price_levels: 100,
+            quantity: 5,
+        });
+
+        c.bench_function(&format!("two_sided_{order_count}_orders"), |b| {
+            b.iter(|| {
+                run_scenario(black_box(&commands)).expect("benchmark scenario should run");
+            });
+        });
+    }
+}
+
+fn build_deep_book(order_count: u64) -> OrderBook {
+    let mut book = OrderBook::new();
+
+    for id in 1..=order_count {
+        // Same price level creates a deep FIFO queue.
+        // This is intentionally bad for current cancel scanning.
+        book.add_order(Order::new(id, Side::Buy, 100, 10))
+            .expect("setup order should be accepted");
+    }
+
+    book
+}
+
+fn bench_deep_cancel_modify(c: &mut Criterion) {
+    c.bench_function("cancel_from_10000_deep_level", |b| {
+        b.iter_batched(
+            || build_deep_book(10_000),
+            |mut book| {
+                // Cancel near the end to expose scan cost.
+                book.cancel_order(black_box(9_999))
+                    .expect("cancel should succeed");
+            }, 
+            BatchSize::LargeInput,
+        );
+    });
+
+    c.bench_function("modify_from_10000_deep_level", |b| {
+        b.iter_batched(
+            || build_deep_book(10_000),
+            |mut book| {
+                // Modify also removes first, so it exposes the same lookup weakness.
+                book.modify_order(black_box(9_999), black_box(101), black_box(7))
+                    .expect("modify should succeed");
+            },
+            BatchSize::LargeInput,
+        );
+    });
+}
+
+fn bench_multi_symbol_workload(c: &mut Criterion) {
+    let symbol_count = 100;
+    let orders_per_symbol = 1_000;
+
+    let commands = generate_two_sided_orders(GeneratorConfig {
+        order_count: orders_per_symbol,
+        start_order_id: 1,
+        base_price: 100_000,
+        tick_size: 1,
+        price_levels: 50,
+        quantity: 5,
+    });
+
+    c.bench_function("multi_symbol_100x1000_orders", |b| {
+        b.iter(|| {
+            let mut books = Vec::with_capacity(symbol_count);
+
+            for _ in 0..symbol_count {
+                // Each OrderBook represents one instrument/symbol.
+                let result = run_scenario(black_box(&commands))
+                    .expect("symbol scenario should run");
+                books.push(result.book);
+            }
+
+            black_box(books);
+        });
+    });
+}
+
 criterion_group!(
     benches,
     bench_two_sided_synthetic,
     bench_crossing_synthetic,
-    bench_hot_path_operations
+    bench_hot_path_operations,
+    bench_large_two_sided_books,
+    bench_deep_cancel_modify,
+    bench_multi_symbol_workload
 );
 criterion_main!(benches);
