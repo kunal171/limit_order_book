@@ -17,7 +17,7 @@ whether the change actually helped.
 ```text
 Date: 2026-09-05
 Branch: phase-11-hft-systems
-Commit: 31b7969
+Commit: 2a939c0
 Rust: rustc 1.97.1 (8bab26f4f 2026-07-14)
 Command: cargo bench
 Verification: cargo test, 42 passed
@@ -33,21 +33,21 @@ Use the middle number as the main baseline estimate. Lower is better.
 
 | Benchmark | Lower | Estimate | Upper | What It Measures |
 | --- | ---: | ---: | ---: | --- |
-| `two_sided_1000_orders` | 52.532 us | 52.797 us | 53.152 us | Runs 1,000 deterministic non-crossing orders |
-| `crossing_1000_orders` | 49.813 us | 49.945 us | 50.103 us | Runs 1,000 deterministic orders that create trades through `run_scenario` |
-| `add_one_resting_order` | 78.622 ns | 78.966 ns | 79.353 ns | Creates a fresh book and adds one order that rests |
-| `single_trade` | 93.341 ns | 94.031 ns | 94.908 ns | Matches one crossing order against one resting order |
-| `multi_level_sweep` | 214.17 ns | 215.61 ns | 217.68 ns | Sweeps multiple price levels with one order |
-| `cancel_order` | 93.394 ns | 94.403 ns | 95.539 ns | Cancels one resting order |
-| `modify_order` | 146.68 ns | 147.55 ns | 148.64 ns | Modifies one resting order |
-| `two_sided_10000_orders` | 579.08 us | 580.02 us | 581.13 us | Runs 10,000 deterministic non-crossing orders |
-| `two_sided_100000_orders` | 5.6126 ms | 5.8247 ms | 6.0992 ms | Runs 100,000 deterministic non-crossing orders |
-| `cancel_from_10000_deep_level` | 3.8171 us | 3.8347 us | 3.8541 us | Cancels near the end of a 10,000-order FIFO price level |
-| `modify_from_10000_deep_level` | 3.9611 us | 3.9739 us | 3.9878 us | Modifies near the end of a 10,000-order FIFO price level |
-| `multi_symbol_100x1000_orders` | 6.6134 ms | 6.6507 ms | 6.7050 ms | Runs 100 books with 1,000 orders each |
-| `crossing_1000_events_full` | 46.648 us | 46.720 us | 46.804 us | Crossing workload with full in-memory event recording |
-| `crossing_1000_events_trades_only` | 45.035 us | 45.119 us | 45.210 us | Crossing workload recording only trade events |
-| `crossing_1000_events_disabled` | 44.401 us | 44.686 us | 45.043 us | Crossing workload with event recording disabled |
+| `two_sided_1000_orders` | 58.094 us | 59.752 us | 61.756 us | Runs 1,000 deterministic non-crossing orders |
+| `crossing_1000_orders` | 54.570 us | 55.225 us | 55.907 us | Runs 1,000 deterministic orders that create trades through `run_scenario` |
+| `add_one_resting_order` | 79.576 ns | 79.936 ns | 80.332 ns | Creates a fresh book and adds one order that rests |
+| `single_trade_ref` | 35.793 ns | 36.938 ns | 38.193 ns | Matches one crossing order against one resting order using corrected benchmark boundary |
+| `multi_level_sweep_ref` | 153.60 ns | 157.13 ns | 160.60 ns | Sweeps multiple price levels with one order using corrected benchmark boundary |
+| `cancel_order_ref` | 53.622 ns | 55.476 ns | 57.833 ns | Cancels one resting order using corrected benchmark boundary |
+| `modify_order_ref` | 103.25 ns | 107.07 ns | 111.15 ns | Modifies one resting order using corrected benchmark boundary |
+| `two_sided_10000_orders` | 659.84 us | 665.85 us | 672.17 us | Runs 10,000 deterministic non-crossing orders |
+| `two_sided_100000_orders` | 7.5165 ms | 7.6901 ms | 7.8904 ms | Runs 100,000 deterministic non-crossing orders |
+| `cancel_from_10000_deep_level_ref` | 4.2947 us | 4.5680 us | 4.8826 us | Cancels near the end of a 10,000-order FIFO price level using corrected benchmark boundary |
+| `modify_from_10000_deep_level_ref` | 4.7085 us | 5.0760 us | 5.4835 us | Modifies near the end of a 10,000-order FIFO price level using corrected benchmark boundary |
+| `multi_symbol_100x1000_orders` | 7.7052 ms | 7.9048 ms | 8.1330 ms | Runs 100 books with 1,000 orders each |
+| `crossing_1000_events_full` | 50.948 us | 52.046 us | 53.515 us | Crossing workload with full in-memory event recording |
+| `crossing_1000_events_trades_only` | 49.084 us | 49.985 us | 51.066 us | Crossing workload recording only trade events |
+| `crossing_1000_events_disabled` | 47.333 us | 47.991 us | 48.788 us | Crossing workload with event recording disabled |
 
 ## Event Mode Comparison
 
@@ -67,61 +67,57 @@ end-to-end simulator path.
 Current estimate:
 
 ```text
-Full:        46.720 us
-TradesOnly:  45.119 us
-Disabled:    44.686 us
+Full:        52.046 us
+TradesOnly:  49.985 us
+Disabled:    47.991 us
 ```
 
 Interpretation:
 
 ```text
-Full event logging costs about 2.034 us over Disabled on this 1,000-order
+Full event logging costs about 4.055 us over Disabled on this 1,000-order
 crossing workload.
 
-TradesOnly is very close to Disabled, so accepted/cancel/modify event storage is
-the larger event-log cost in this workload.
+TradesOnly costs about 1.994 us over Disabled. Full costs about 2.061 us over
+TradesOnly, so accepted/cancel/modify event storage is visible in this workload.
 ```
 
-## Benchmark Boundary Warning
+## Corrected Operation Benchmarks
 
-Some operation benchmarks still include cleanup cost:
+The operation-style benchmarks now use `iter_batched_ref` and `_ref` names:
 
 ```text
-single_trade
-multi_level_sweep
-cancel_order
-modify_order
-cancel_from_10000_deep_level
-modify_from_10000_deep_level
+single_trade_ref
+multi_level_sweep_ref
+cancel_order_ref
+modify_order_ref
+cancel_from_10000_deep_level_ref
+modify_from_10000_deep_level_ref
 ```
 
-These use `iter_batched`, where the prepared `OrderBook` is consumed by the
-timed closure and dropped at the end of that closure. That means the reported
-number is operation plus teardown, not the pure operation alone.
+These benchmarks use `iter_batched_ref`, where the prepared `OrderBook` is
+created outside the measured closure and passed into the measured closure by
+mutable reference. This keeps setup outside timing and avoids counting the drop
+of the prepared book inside the measured operation.
 
-Before optimizing cancel/modify, add corrected benchmark variants using
-`iter_batched_ref`, so Criterion stops the timer before the prepared book is
-dropped.
+Corrected hot-path estimates:
 
-Example shape:
-
-```rust
-b.iter_batched_ref(
-    || {
-        let mut book = OrderBook::new();
-        book.add_order(Order::new(1, Side::Buy, 100, 10))
-            .expect("setup order should rest");
-        book
-    },
-    |book| {
-        black_box(book.cancel_order(1).expect("cancel should work"));
-    },
-    BatchSize::SmallInput,
-);
+```text
+single trade:       36.938 ns
+multi-level sweep: 157.13 ns
+cancel one order:   55.476 ns
+modify one order:  107.07 ns
 ```
 
-These corrected benchmark names should be new names, because they are not
-directly comparable with the older baseline.
+Deep cancel/modify are still much slower because the implementation scans inside
+the FIFO queue at a price level.
+
+```text
+deep cancel: 4.5680 us
+deep modify: 5.0760 us
+```
+
+This gives us a cleaner reason to optimize the order-location index next.
 
 ## Run Details
 
@@ -451,22 +447,32 @@ TradesOnly mode keeps execution output without recording every accepted command.
 Next benchmark target:
 
 ```text
-add corrected operation-only benchmark variants using iter_batched_ref
+optimize deep cancel/modify lookup and compare against the corrected _ref baseline
 ```
 
-After that, run:
+Before changing the data structure, write down the expected reason:
+
+```text
+current side index finds Buy/Sell quickly
+current remove path still scans inside the selected price level
+next index should locate side + price level directly
+```
+
+After implementation, run:
 
 ```bash
 cargo test
 cargo bench
 ```
 
-Then compare old vs new benchmark boundaries carefully:
+Then compare especially:
 
 ```text
-old names: include operation plus teardown
-new names: should isolate operation timing more cleanly
+cancel_from_10000_deep_level_ref
+modify_from_10000_deep_level_ref
+cancel_order_ref
+modify_order_ref
 ```
 
-This will give a cleaner baseline before changing the order index or price
-ladder structure.
+The goal is to reduce deep cancel/modify without breaking FIFO matching or
+making normal add/trade operations slower.
