@@ -4,7 +4,6 @@ use crate::engine::config::{EventMode, OrderBookConfig};
 use crate::error::OrderBookError;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OrderLocation {
     pub side: Side,
@@ -70,18 +69,14 @@ impl OrderBook {
         self.bids
             .iter()
             .rev()
-            .find(|(_, order_ids)| {
-                order_ids.iter().any(|id| self.orders.contains_key(id))
-            })
+            .find(|(_, order_ids)| order_ids.iter().any(|id| self.orders.contains_key(id)))
             .map(|(price, _)| *price)
     }
 
     pub fn best_ask(&self) -> Option<Price> {
         self.asks
             .iter()
-            .find(|(_, order_ids)| {
-                order_ids.iter().any(|id| self.orders.contains_key(id))
-            })
+            .find(|(_, order_ids)| order_ids.iter().any(|id| self.orders.contains_key(id)))
             .map(|(price, _)| *price)
     }
 
@@ -93,7 +88,6 @@ impl OrderBook {
 
     // Cancel the order
     pub fn cancel_order(&mut self, order_id: OrderId) -> Result<(), OrderBookError> {
-
         self.order_locations
             .remove(&order_id)
             .ok_or(OrderBookError::UnknownOrderId)?;
