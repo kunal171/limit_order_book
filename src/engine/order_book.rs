@@ -6,9 +6,9 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct OrderLocation {
-    side: Side,
-    price: Price,
+pub struct OrderLocation {
+    pub side: Side,
+    pub price: Price,
 }
 
 /// A simple price-time priority limit order book.
@@ -107,34 +107,6 @@ impl OrderBook {
 
         Ok(())
     }
-
-    //Remove order from the given side
-    // fn remove_order_from_side(&mut self, order_id: OrderId, side: Side) -> Option<Order> {
-    //     // find the order book of side
-    //     let levels = match side {
-    //         Side::Buy => &mut self.bids,
-    //         Side::Sell => &mut self.asks,
-    //     };
-
-    //     let mut removed_order = None;
-    //     let mut empty_price_level = None;
-
-    //     for (price, orders) in levels.iter_mut() {
-    //         if let Some(index) = orders.iter().position(|order| order.id == order_id) {
-    //             removed_order = orders.remove(index);
-    //             if orders.is_empty() {
-    //                 empty_price_level = Some(*price);
-    //             }
-
-    //             break;
-    //         }
-    //     }
-
-    //     if let Some(price) = empty_price_level {
-    //         levels.remove(&price);
-    //     }
-    //     removed_order
-    // }
 
     fn remove_order_by_id(&mut self, order_id: OrderId) -> Option<Order> {
         self.order_locations.remove(&order_id)?;

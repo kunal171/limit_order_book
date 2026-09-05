@@ -1,4 +1,4 @@
-use crate::domain::{Order, Price, Side, Trade};
+use crate::domain::{Order, Price, Trade};
 
 use super::order_book::OrderBook;
 
