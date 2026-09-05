@@ -10,20 +10,23 @@ pub struct OrderLocation {
     pub price: Price,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PriceLevel {
+    pub order_ids: VecDeque<OrderId>,
+    pub total_quantity: Quantity,
+}
 /// A simple price-time priority limit order book.
 ///
 /// `BTreeMap` keeps price levels sorted.
 /// `VecDeque` preserves FIFO order inside each price level.
 #[derive(Debug, Default)]
 pub struct OrderBook {
-    pub(super) bids: BTreeMap<Price, VecDeque<OrderId>>,
-    pub(super) asks: BTreeMap<Price, VecDeque<OrderId>>,
+    pub(super) bids: BTreeMap<Price, PriceLevel>,
+    pub(super) asks: BTreeMap<Price, PriceLevel>,
     pub(super) orders: HashMap<OrderId, Order>,
     pub(super) order_locations: HashMap<OrderId, OrderLocation>,
     pub(super) events: Vec<BookEvent>,
     pub(super) config: OrderBookConfig,
-    pub(super) bid_depth: BTreeMap<Price, Quantity>,
-    pub(super) ask_depth: BTreeMap<Price, Quantity>,
 }
 
 impl OrderBook {
@@ -40,8 +43,6 @@ impl OrderBook {
             order_locations: HashMap::new(),
             events: Vec::new(),
             config,
-            bid_depth: BTreeMap::new(),
-            ask_depth: BTreeMap::new(),
         }
     }
 
@@ -70,11 +71,18 @@ impl OrderBook {
 
     /// Highest resting buy price.
     pub fn best_bid(&self) -> Option<Price> {
-        self.bid_depth.keys().next_back().copied()
+        self.bids
+            .iter()
+            .rev()
+            .find(|(_, level)| level.total_quantity > 0)
+            .map(|(price, _)| *price)
     }
 
     pub fn best_ask(&self) -> Option<Price> {
-        self.ask_depth.keys().next().copied()
+        self.asks
+            .iter()
+            .find(|(_, level)| level.total_quantity > 0)
+            .map(|(price, _)| *price)
     }
 
     /// Number of resting orders across both sides.
@@ -94,7 +102,8 @@ impl OrderBook {
             .remove(&order_id)
             .ok_or(OrderBookError::UnknownOrderId)?;
 
-        self.decrease_depth(location.side, location.price, order.remaining_qty);
+        // Decrease quantity
+        self.decrease_level_quantity(location, order.remaining_qty);
         //record cancel
         self.record_order_cancelled(order_id);
 
@@ -105,7 +114,7 @@ impl OrderBook {
         let location = self.order_locations.remove(&order_id)?;
         let order = self.orders.remove(&order_id)?;
 
-        self.decrease_depth(location.side, location.price, order.remaining_qty);
+        self.decrease_level_quantity(location, order.remaining_qty);
         self.remove_order_id_from_level(location, order_id);
 
         Some(order)
@@ -156,6 +165,7 @@ impl OrderBook {
             .rev()
             .filter_map(|(price, order_ids)| {
                 let orders: Vec<Order> = order_ids
+                    .order_ids
                     .iter()
                     .filter_map(|id| self.orders.get(id).cloned())
                     .collect();
@@ -172,6 +182,7 @@ impl OrderBook {
             .iter()
             .filter_map(|(price, order_ids)| {
                 let orders: Vec<Order> = order_ids
+                    .order_ids
                     .iter()
                     .filter_map(|id| self.orders.get(id).cloned())
                     .collect();
@@ -190,21 +201,24 @@ impl OrderBook {
         let order_id = order.id;
         let side = order.side;
         let price = order.price;
-        let quantity = order.remaining_qty;
 
         let levels = match side {
             Side::Buy => &mut self.bids,
             Side::Sell => &mut self.asks,
         };
 
-        levels.entry(price).or_default().push_back(order_id);
+        let level = levels.entry(price).or_insert_with(|| PriceLevel {
+            order_ids: VecDeque::new(),
+            total_quantity: 0,
+        });
+
+        level.order_ids.push_back(order_id);
+        level.total_quantity += order.remaining_qty;
 
         self.order_locations
             .insert(order_id, OrderLocation { side, price });
 
         self.orders.insert(order_id, order);
-
-        self.increase_depth(side, price, quantity);
     }
 
     fn remove_order_id_from_level(&mut self, location: OrderLocation, order_id: OrderId) {
@@ -214,43 +228,32 @@ impl OrderBook {
         };
 
         if let Some(level) = levels.get_mut(&location.price) {
-            if let Some(index) = level.iter().position(|id| *id == order_id) {
-                level.remove(index);
+            if let Some(index) = level.order_ids.iter().position(|id| *id == order_id) {
+                level.order_ids.remove(index);
             }
 
-            if level.is_empty() {
+            if level.order_ids.is_empty() {
                 levels.remove(&location.price);
             }
         }
     }
 
-    fn increase_depth(&mut self, side: Side, price: Price, quantity: Quantity) {
-        let depth = match side {
-            Side::Buy => &mut self.bid_depth,
-            Side::Sell => &mut self.ask_depth,
+    fn decrease_level_quantity(&mut self, location: OrderLocation, quantity: Quantity) {
+        let levels = match location.side {
+            Side::Buy => &mut self.bids,
+            Side::Sell => &mut self.asks,
         };
-        *depth.entry(price).or_insert(0) += quantity;
-    }
 
-    fn decrease_depth(&mut self, side: Side, price: Price, quantity: Quantity) {
-        let depth = match side {
-            Side::Buy => &mut self.bid_depth,
-            Side::Sell => &mut self.ask_depth,
+        let should_remove_level = if let Some(level) = levels.get_mut(&location.price) {
+            debug_assert!(level.total_quantity >= quantity);
+            level.total_quantity -= quantity;
+            level.total_quantity == 0
+        } else {
+            false
         };
-        Self::decrease_depth_map(depth, price, quantity);
-    }
 
-    pub(super) fn decrease_depth_map(
-        depth: &mut BTreeMap<Price, Quantity>,
-        price: Price,
-        quantity: Quantity,
-    ) {
-        if let Some(current_quantity) = depth.get_mut(&price) {
-            *current_quantity -= quantity;
-
-            if *current_quantity == 0 {
-                depth.remove(&price);
-            }
+        if should_remove_level {
+            levels.remove(&location.price);
         }
     }
 

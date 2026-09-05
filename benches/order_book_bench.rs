@@ -25,9 +25,27 @@ fn build_deep_book_with_stale_ids(order_count: u64) -> OrderBook {
 
     for id in 1..order_count {
         // Lazy cancel leaves stale IDs in the FIFO queue, but removes active
-        // liquidity from the direct maps.
+        // liquidity from the price level's total quantity.
         book.cancel_order(id)
             .expect("setup cancel should remove active order");
+    }
+
+    book
+}
+
+fn build_book_with_cancelled_price_levels(price_level_count: u64) -> OrderBook {
+    let mut book = OrderBook::new();
+
+    for id in 1..=price_level_count {
+        book.add_order(Order::new(id, Side::Buy, id, 10))
+            .expect("setup order should be accepted");
+    }
+
+    for id in 2..=price_level_count {
+        // Leaves the lowest price active and cancels every better bid level.
+        // The benchmark verifies best_bid does not pay to scan dead levels.
+        book.cancel_order(id)
+            .expect("setup cancel should remove active liquidity");
     }
 
     book
@@ -249,11 +267,12 @@ fn bench_deep_cancel_modify(c: &mut Criterion) {
     });
 }
 
-fn bench_market_depth_queries(c: &mut Criterion) {
+fn bench_price_level_liquidity_queries(c: &mut Criterion) {
     let active_book = build_deep_book(10_000);
     let stale_book = build_deep_book_with_stale_ids(10_000);
+    let cancelled_levels_book = build_book_with_cancelled_price_levels(10_000);
 
-    c.bench_function("best_bid_from_10000_active_orders", |b| {
+    c.bench_function("best_bid_from_price_level_quantity_10000_orders", |b| {
         b.iter(|| {
             black_box(active_book.best_bid());
         });
@@ -265,9 +284,15 @@ fn bench_market_depth_queries(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("best_bid_after_9999_lazy_cancels", |b| {
+    c.bench_function("best_bid_after_9999_same_level_lazy_cancels", |b| {
         b.iter(|| {
             black_box(stale_book.best_bid());
+        });
+    });
+
+    c.bench_function("best_bid_after_9999_cancelled_price_levels", |b| {
+        b.iter(|| {
+            black_box(cancelled_levels_book.best_bid());
         });
     });
 }
@@ -346,7 +371,7 @@ criterion_group!(
     bench_hot_path_operations,
     bench_large_two_sided_books,
     bench_deep_cancel_modify,
-    bench_market_depth_queries,
+    bench_price_level_liquidity_queries,
     bench_multi_symbol_workload,
     bench_event_modes
 );

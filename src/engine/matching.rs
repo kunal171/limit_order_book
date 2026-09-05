@@ -61,7 +61,7 @@ impl OrderBook {
 
         if let Some(level) = self.asks.get_mut(&price) {
             while !incoming.is_filled() {
-                let Some(resting_id) = level.pop_front() else {
+                let Some(resting_id) = level.order_ids.pop_front() else {
                     break;
                 };
 
@@ -73,7 +73,7 @@ impl OrderBook {
                 incoming.remaining_qty -= traded_qty;
                 resting.remaining_qty -= traded_qty;
 
-                Self::decrease_depth_map(&mut self.ask_depth, price, traded_qty);
+                level.total_quantity -= traded_qty;
 
                 trades.push(Trade::new(resting.id, incoming.id, price, traded_qty));
 
@@ -83,12 +83,12 @@ impl OrderBook {
                     self.order_locations.remove(&resting.id);
                 } else {
                     self.orders.insert(resting.id, resting);
-                    level.push_front(resting_id);
+                    level.order_ids.push_front(resting_id);
                     break;
                 }
             }
 
-            should_remove_level = level.is_empty();
+            should_remove_level = level.order_ids.is_empty() || level.total_quantity == 0;
         }
 
         if should_remove_level {
@@ -102,7 +102,7 @@ impl OrderBook {
 
         if let Some(level) = self.bids.get_mut(&price) {
             while !incoming.is_filled() {
-                let Some(resting_id) = level.pop_front() else {
+                let Some(resting_id) = level.order_ids.pop_front() else {
                     break;
                 };
 
@@ -113,7 +113,8 @@ impl OrderBook {
                 incoming.remaining_qty -= traded_qty;
                 resting.remaining_qty -= traded_qty;
 
-                Self::decrease_depth_map(&mut self.bid_depth, price, traded_qty);
+                //update total quantity
+                level.total_quantity -= traded_qty;
 
                 trades.push(Trade::new(resting.id, incoming.id, price, traded_qty));
 
@@ -123,12 +124,12 @@ impl OrderBook {
                     self.order_locations.remove(&resting.id);
                 } else {
                     self.orders.insert(resting.id, resting);
-                    level.push_front(resting_id);
+                    level.order_ids.push_front(resting_id);
                     break;
                 }
             }
 
-            should_remove_level = level.is_empty();
+            should_remove_level = level.order_ids.is_empty() || level.total_quantity == 0;
         }
 
         if should_remove_level {
