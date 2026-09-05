@@ -201,7 +201,6 @@ impl OrderBook {
         let asks = self
             .asks
             .iter()
-            .rev()
             .filter_map(|(price, order_ids)| {
                 let orders: Vec<Order> = order_ids
                     .iter()
