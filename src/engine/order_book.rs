@@ -22,6 +22,8 @@ pub struct OrderBook {
     pub(super) order_locations: HashMap<OrderId, OrderLocation>,
     pub(super) events: Vec<BookEvent>,
     pub(super) config: OrderBookConfig,
+    pub(super) bid_depth: BTreeMap<Price, Quantity>,
+    pub(super) ask_depth: BTreeMap<Price, Quantity>,
 }
 
 impl OrderBook {
@@ -38,6 +40,8 @@ impl OrderBook {
             order_locations: HashMap::new(),
             events: Vec::new(),
             config,
+            bid_depth: BTreeMap::new(),
+            ask_depth: BTreeMap::new(),
         }
     }
 
@@ -66,36 +70,31 @@ impl OrderBook {
 
     /// Highest resting buy price.
     pub fn best_bid(&self) -> Option<Price> {
-        self.bids
-            .iter()
-            .rev()
-            .find(|(_, order_ids)| order_ids.iter().any(|id| self.orders.contains_key(id)))
-            .map(|(price, _)| *price)
+        self.bid_depth.keys().next_back().copied()
     }
 
     pub fn best_ask(&self) -> Option<Price> {
-        self.asks
-            .iter()
-            .find(|(_, order_ids)| order_ids.iter().any(|id| self.orders.contains_key(id)))
-            .map(|(price, _)| *price)
+        self.ask_depth.keys().next().copied()
     }
 
     /// Number of resting orders across both sides.
     pub fn resting_order_count(&self) -> usize {
-        self.bids.values().map(VecDeque::len).sum::<usize>()
-            + self.asks.values().map(VecDeque::len).sum::<usize>()
+        self.orders.len()
     }
 
     // Cancel the order
     pub fn cancel_order(&mut self, order_id: OrderId) -> Result<(), OrderBookError> {
-        self.order_locations
+        let location = self
+            .order_locations
             .remove(&order_id)
             .ok_or(OrderBookError::UnknownOrderId)?;
 
-        self.orders
+        let order = self
+            .orders
             .remove(&order_id)
             .ok_or(OrderBookError::UnknownOrderId)?;
 
+        self.decrease_depth(location.side, location.price, order.remaining_qty);
         //record cancel
         self.record_order_cancelled(order_id);
 
@@ -103,9 +102,13 @@ impl OrderBook {
     }
 
     fn remove_order_by_id(&mut self, order_id: OrderId) -> Option<Order> {
-        self.order_locations.remove(&order_id)?;
+        let location = self.order_locations.remove(&order_id)?;
+        let order = self.orders.remove(&order_id)?;
 
-        self.orders.remove(&order_id)
+        self.decrease_depth(location.side, location.price, order.remaining_qty);
+        self.remove_order_id_from_level(location, order_id);
+
+        Some(order)
     }
 
     pub fn modify_order(
@@ -187,6 +190,7 @@ impl OrderBook {
         let order_id = order.id;
         let side = order.side;
         let price = order.price;
+        let quantity = order.remaining_qty;
 
         let levels = match side {
             Side::Buy => &mut self.bids,
@@ -199,6 +203,47 @@ impl OrderBook {
             .insert(order_id, OrderLocation { side, price });
 
         self.orders.insert(order_id, order);
+
+        self.increase_depth(side, price, quantity);
+    }
+
+    fn remove_order_id_from_level(&mut self, location: OrderLocation, order_id: OrderId) {
+        let levels = match location.side {
+            Side::Buy => &mut self.bids,
+            Side::Sell => &mut self.asks,
+        };
+
+        if let Some(level) = levels.get_mut(&location.price) {
+            if let Some(index) = level.iter().position(|id| *id == order_id) {
+                level.remove(index);
+            }
+
+            if level.is_empty() {
+                levels.remove(&location.price);
+            }
+        }
+    }
+
+    fn increase_depth(&mut self, side: Side, price: Price, quantity: Quantity) {
+        let depth = match side {
+            Side::Buy => &mut self.bid_depth,
+            Side::Sell => &mut self.ask_depth,
+        };
+        *depth.entry(price).or_insert(0) += quantity;
+    }
+
+    fn decrease_depth(&mut self, side: Side, price: Price, quantity: Quantity) {
+        let depth = match side {
+            Side::Buy => &mut self.bid_depth,
+            Side::Sell => &mut self.ask_depth,
+        };
+        if let Some(current_quantity) = depth.get_mut(&price) {
+            *current_quantity -= quantity;
+
+            if *current_quantity == 0 {
+                depth.remove(&price);
+            }
+        }
     }
 
     fn record_order_accepted(&mut self, order: &Order) {
@@ -245,6 +290,7 @@ impl OrderBook {
 mod tests {
     use super::*;
     use crate::domain::Side;
+    use crate::metrics::calculate_book_metrics;
 
     #[test]
     fn buy_order_rests_when_there_is_no_matching_ask() {
@@ -486,6 +532,24 @@ mod tests {
     }
 
     #[test]
+    fn cancelled_order_does_not_count_as_liquidity() {
+        let mut book = OrderBook::new();
+
+        book.add_order(Order::new(1, Side::Buy, 100, 10))
+            .expect("valid bid should be accepted");
+        book.cancel_order(1).expect("cancel should succeed");
+
+        let snapshot = book.snapshot();
+        let metrics = calculate_book_metrics(&snapshot);
+
+        assert_eq!(book.best_bid(), None);
+        assert_eq!(book.resting_order_count(), 0);
+        assert!(snapshot.bids.is_empty());
+        assert_eq!(metrics.total_bid_quantity, 0);
+        assert_eq!(metrics.imbalance, None);
+    }
+
+    #[test]
     fn modify_unknown_order_returns_error() {
         let mut book = OrderBook::new();
 
@@ -534,6 +598,29 @@ mod tests {
         assert!(trades.is_empty());
         assert_eq!(book.best_bid(), Some(105));
         assert_eq!(book.resting_order_count(), 1);
+    }
+
+    #[test]
+    fn partial_fill_reduces_depth_but_keeps_remaining_liquidity() {
+        let mut book = OrderBook::new();
+
+        book.add_order(Order::new(1, Side::Buy, 100, 10))
+            .expect("valid bid should be accepted");
+
+        let trades = book
+            .add_order(Order::new(2, Side::Sell, 100, 4))
+            .expect("crossing sell should trade");
+
+        let snapshot = book.snapshot();
+        let metrics = calculate_book_metrics(&snapshot);
+
+        assert_eq!(trades, vec![Trade::new(1, 2, 100, 4)]);
+        assert_eq!(book.best_bid(), Some(100));
+        assert_eq!(book.resting_order_count(), 1);
+        assert_eq!(snapshot.bids[0].1[0].remaining_qty, 6);
+        assert_eq!(metrics.total_bid_quantity, 6);
+        assert_eq!(metrics.total_ask_quantity, 0);
+        assert_eq!(metrics.imbalance, Some(1.0));
     }
 
     #[test]

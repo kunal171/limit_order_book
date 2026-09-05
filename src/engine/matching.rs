@@ -73,6 +73,13 @@ impl OrderBook {
                 incoming.remaining_qty -= traded_qty;
                 resting.remaining_qty -= traded_qty;
 
+                if let Some(depth_qty) = self.ask_depth.get_mut(&price) {
+                    *depth_qty -= traded_qty;
+                    if *depth_qty == 0 {
+                        self.ask_depth.remove(&price);
+                    }
+                }
+
                 trades.push(Trade::new(resting.id, incoming.id, price, traded_qty));
 
                 // A fully filled resting order must leave the active-order index.
@@ -110,6 +117,13 @@ impl OrderBook {
                 let traded_qty = incoming.remaining_qty.min(resting.remaining_qty);
                 incoming.remaining_qty -= traded_qty;
                 resting.remaining_qty -= traded_qty;
+
+                if let Some(depth_qty) = self.bid_depth.get_mut(&price) {
+                    *depth_qty -= traded_qty;
+                    if *depth_qty == 0 {
+                        self.bid_depth.remove(&price);
+                    }
+                }
 
                 trades.push(Trade::new(resting.id, incoming.id, price, traded_qty));
 

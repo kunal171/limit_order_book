@@ -17,10 +17,11 @@ whether the change actually helped.
 ```text
 Date: 2026-09-05
 Branch: phase-11-hft-systems
-Commit: 2a939c0
+Commit: 3c35289 + working tree depth-map changes
 Rust: rustc 1.97.1 (8bab26f4f 2026-07-14)
 Command: cargo bench
-Verification: cargo test, 42 passed
+Verification: cargo fmt --check, cargo check, cargo test
+Test result: 44 passed
 ```
 
 Criterion reports each result as:
@@ -33,21 +34,25 @@ Use the middle number as the main baseline estimate. Lower is better.
 
 | Benchmark | Lower | Estimate | Upper | What It Measures |
 | --- | ---: | ---: | ---: | --- |
-| `two_sided_1000_orders` | 58.094 us | 59.752 us | 61.756 us | Runs 1,000 deterministic non-crossing orders |
-| `crossing_1000_orders` | 54.570 us | 55.225 us | 55.907 us | Runs 1,000 deterministic orders that create trades through `run_scenario` |
-| `add_one_resting_order` | 79.576 ns | 79.936 ns | 80.332 ns | Creates a fresh book and adds one order that rests |
-| `single_trade_ref` | 35.793 ns | 36.938 ns | 38.193 ns | Matches one crossing order against one resting order using corrected benchmark boundary |
-| `multi_level_sweep_ref` | 153.60 ns | 157.13 ns | 160.60 ns | Sweeps multiple price levels with one order using corrected benchmark boundary |
-| `cancel_order_ref` | 53.622 ns | 55.476 ns | 57.833 ns | Cancels one resting order using corrected benchmark boundary |
-| `modify_order_ref` | 103.25 ns | 107.07 ns | 111.15 ns | Modifies one resting order using corrected benchmark boundary |
-| `two_sided_10000_orders` | 659.84 us | 665.85 us | 672.17 us | Runs 10,000 deterministic non-crossing orders |
-| `two_sided_100000_orders` | 7.5165 ms | 7.6901 ms | 7.8904 ms | Runs 100,000 deterministic non-crossing orders |
-| `cancel_from_10000_deep_level_ref` | 4.2947 us | 4.5680 us | 4.8826 us | Cancels near the end of a 10,000-order FIFO price level using corrected benchmark boundary |
-| `modify_from_10000_deep_level_ref` | 4.7085 us | 5.0760 us | 5.4835 us | Modifies near the end of a 10,000-order FIFO price level using corrected benchmark boundary |
-| `multi_symbol_100x1000_orders` | 7.7052 ms | 7.9048 ms | 8.1330 ms | Runs 100 books with 1,000 orders each |
-| `crossing_1000_events_full` | 50.948 us | 52.046 us | 53.515 us | Crossing workload with full in-memory event recording |
-| `crossing_1000_events_trades_only` | 49.084 us | 49.985 us | 51.066 us | Crossing workload recording only trade events |
-| `crossing_1000_events_disabled` | 47.333 us | 47.991 us | 48.788 us | Crossing workload with event recording disabled |
+| `two_sided_1000_orders` | 85.699 us | 86.680 us | 87.875 us | Runs 1,000 deterministic non-crossing orders |
+| `crossing_1000_orders` | 80.711 us | 81.799 us | 83.019 us | Runs 1,000 deterministic orders that create trades through `run_scenario` |
+| `add_one_resting_order` | 110.43 ns | 112.03 ns | 114.05 ns | Creates a fresh book and adds one order that rests |
+| `single_trade_ref` | 67.138 ns | 75.483 ns | 86.966 ns | Matches one crossing order against one resting order using corrected benchmark boundary |
+| `multi_level_sweep_ref` | 235.10 ns | 236.71 ns | 238.43 ns | Sweeps multiple price levels with one order using corrected benchmark boundary |
+| `cancel_order_ref` | 44.424 ns | 47.276 ns | 51.132 ns | Cancels one resting order using corrected benchmark boundary |
+| `modify_order_ref` | 125.04 ns | 132.25 ns | 141.54 ns | Modifies one resting order using corrected benchmark boundary |
+| `two_sided_10000_orders` | 951.49 us | 965.13 us | 981.98 us | Runs 10,000 deterministic non-crossing orders |
+| `two_sided_100000_orders` | 11.850 ms | 12.195 ms | 12.560 ms | Runs 100,000 deterministic non-crossing orders |
+| `cancel_from_10000_deep_level_ref` | 61.769 ns | 64.457 ns | 67.306 ns | Cancels near the end of a 10,000-order FIFO price level using corrected benchmark boundary |
+| `cancel_after_9999_lazy_cancels_ref` | 129.18 ns | 138.30 ns | 147.97 ns | Cancels the last active order after 9,999 lazy cancels left stale queue IDs |
+| `modify_from_10000_deep_level_ref` | 2.8114 us | 2.8732 us | 2.9361 us | Modifies near the end of a 10,000-order FIFO price level using corrected benchmark boundary |
+| `best_bid_from_10000_active_orders` | 1.9191 ns | 1.9595 ns | 2.0095 ns | Reads best bid from active depth map |
+| `resting_count_from_10000_active_orders` | 226.84 ps | 229.71 ps | 233.64 ps | Reads active order count from the order map length |
+| `best_bid_after_9999_lazy_cancels` | 1.8726 ns | 1.8973 ns | 1.9305 ns | Reads best bid after many lazy cancels left stale queue IDs |
+| `multi_symbol_100x1000_orders` | 10.580 ms | 10.625 ms | 10.675 ms | Runs 100 books with 1,000 orders each |
+| `crossing_1000_events_full` | 79.233 us | 80.181 us | 81.203 us | Crossing workload with full in-memory event recording |
+| `crossing_1000_events_trades_only` | 72.897 us | 73.758 us | 74.816 us | Crossing workload recording only trade events |
+| `crossing_1000_events_disabled` | 70.767 us | 71.013 us | 71.286 us | Crossing workload with event recording disabled |
 
 ## Event Mode Comparison
 
@@ -67,18 +72,18 @@ end-to-end simulator path.
 Current estimate:
 
 ```text
-Full:        52.046 us
-TradesOnly:  49.985 us
-Disabled:    47.991 us
+Full:        80.181 us
+TradesOnly:  73.758 us
+Disabled:    71.013 us
 ```
 
 Interpretation:
 
 ```text
-Full event logging costs about 4.055 us over Disabled on this 1,000-order
+Full event logging costs about 9.168 us over Disabled on this 1,000-order
 crossing workload.
 
-TradesOnly costs about 1.994 us over Disabled. Full costs about 2.061 us over
+TradesOnly costs about 2.745 us over Disabled. Full costs about 6.423 us over
 TradesOnly, so accepted/cancel/modify event storage is visible in this workload.
 ```
 
@@ -92,6 +97,7 @@ multi_level_sweep_ref
 cancel_order_ref
 modify_order_ref
 cancel_from_10000_deep_level_ref
+cancel_after_9999_lazy_cancels_ref
 modify_from_10000_deep_level_ref
 ```
 
@@ -103,21 +109,53 @@ of the prepared book inside the measured operation.
 Corrected hot-path estimates:
 
 ```text
-single trade:       36.938 ns
-multi-level sweep: 157.13 ns
-cancel one order:   55.476 ns
-modify one order:  107.07 ns
+single trade:       75.483 ns
+multi-level sweep: 236.71 ns
+cancel one order:   47.276 ns
+modify one order:  132.25 ns
 ```
 
-Deep cancel/modify are still much slower because the implementation scans inside
-the FIFO queue at a price level.
+Deep cancel is now fast because cancel removes from direct maps and updates
+depth without scanning the FIFO queue. Deep modify still physically removes the
+old order ID from its queue, so it remains microsecond-level.
 
 ```text
-deep cancel: 4.5680 us
-deep modify: 5.0760 us
+deep cancel: 64.457 ns
+deep cancel after 9,999 lazy cancels: 138.30 ns
+deep modify: 2.8732 us
 ```
 
-This gives us a cleaner reason to optimize the order-location index next.
+This confirms the lazy-cancel design improves cancel latency dramatically while
+keeping active depth correct for trader-facing pressure/volume reads.
+
+## Depth Map Tradeoff
+
+The current design keeps active depth separately from FIFO matching queues:
+
+```text
+FIFO queues: preserve matching order
+orders map: source of truth for active orders
+bid_depth/ask_depth: source of truth for active liquidity and pressure
+```
+
+This makes best-price and pressure reads very cheap:
+
+```text
+best_bid_from_10000_active_orders: 1.9595 ns
+resting_count_from_10000_active_orders: 229.71 ps
+best_bid_after_9999_lazy_cancels: 1.8973 ns
+```
+
+The cost is that add/match workloads became slower because every active quantity
+change now updates a depth map:
+
+```text
+add_one_resting_order: 112.03 ns
+single_trade_ref: 75.483 ns
+two_sided_1000_orders: 86.680 us
+```
+
+This is the main tradeoff to watch in the next iteration.
 
 ## Run Details
 
@@ -447,15 +485,15 @@ TradesOnly mode keeps execution output without recording every accepted command.
 Next benchmark target:
 
 ```text
-optimize deep cancel/modify lookup and compare against the corrected _ref baseline
+reduce depth-map update overhead without losing correct active liquidity reads
 ```
 
-Before changing the data structure, write down the expected reason:
+Reason:
 
 ```text
-current side index finds Buy/Sell quickly
-current remove path still scans inside the selected price level
-next index should locate side + price level directly
+lazy cancel fixed deep cancel latency
+bid_depth/ask_depth fixed trader-facing pressure reads
+but every add/fill/cancel/modify now updates extra BTreeMap state
 ```
 
 After implementation, run:
@@ -468,11 +506,13 @@ cargo bench
 Then compare especially:
 
 ```text
-cancel_from_10000_deep_level_ref
-modify_from_10000_deep_level_ref
-cancel_order_ref
-modify_order_ref
+add_one_resting_order
+single_trade_ref
+multi_level_sweep_ref
+two_sided_1000_orders
+crossing_1000_orders
+best_bid_from_10000_active_orders
 ```
 
-The goal is to reduce deep cancel/modify without breaking FIFO matching or
-making normal add/trade operations slower.
+The goal is to keep fast active-liquidity reads while reducing the cost paid on
+every order add and every fill.
