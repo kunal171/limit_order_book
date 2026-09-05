@@ -73,12 +73,7 @@ impl OrderBook {
                 incoming.remaining_qty -= traded_qty;
                 resting.remaining_qty -= traded_qty;
 
-                if let Some(depth_qty) = self.ask_depth.get_mut(&price) {
-                    *depth_qty -= traded_qty;
-                    if *depth_qty == 0 {
-                        self.ask_depth.remove(&price);
-                    }
-                }
+                Self::decrease_depth_map(&mut self.ask_depth, price, traded_qty);
 
                 trades.push(Trade::new(resting.id, incoming.id, price, traded_qty));
 
@@ -118,12 +113,7 @@ impl OrderBook {
                 incoming.remaining_qty -= traded_qty;
                 resting.remaining_qty -= traded_qty;
 
-                if let Some(depth_qty) = self.bid_depth.get_mut(&price) {
-                    *depth_qty -= traded_qty;
-                    if *depth_qty == 0 {
-                        self.bid_depth.remove(&price);
-                    }
-                }
+                Self::decrease_depth_map(&mut self.bid_depth, price, traded_qty);
 
                 trades.push(Trade::new(resting.id, incoming.id, price, traded_qty));
 

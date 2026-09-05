@@ -237,6 +237,14 @@ impl OrderBook {
             Side::Buy => &mut self.bid_depth,
             Side::Sell => &mut self.ask_depth,
         };
+        Self::decrease_depth_map(depth, price, quantity);
+    }
+
+    pub(super) fn decrease_depth_map(
+        depth: &mut BTreeMap<Price, Quantity>,
+        price: Price,
+        quantity: Quantity,
+    ) {
         if let Some(current_quantity) = depth.get_mut(&price) {
             *current_quantity -= quantity;
 
