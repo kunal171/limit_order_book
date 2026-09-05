@@ -93,8 +93,8 @@ fn bench_hot_path_operations(c: &mut Criterion) {
         });
     });
 
-    c.bench_function("single_trade", |b| {
-        b.iter_batched(
+    c.bench_function("single_trade_ref", |b| {
+        b.iter_batched_ref(
             || {
                 let mut book = OrderBook::new();
 
@@ -104,7 +104,7 @@ fn bench_hot_path_operations(c: &mut Criterion) {
 
                 book
             },
-            |mut book| {
+            |book| {
                 // Measures only the crossing sell order.
                 book.add_order(black_box(Order::new(2, Side::Sell, 100, 5)))
                     .expect("crossing order should be accepted");
@@ -113,8 +113,8 @@ fn bench_hot_path_operations(c: &mut Criterion) {
         );
     });
 
-    c.bench_function("multi_level_sweep", |b| {
-        b.iter_batched(
+    c.bench_function("multi_level_sweep_ref", |b| {
+        b.iter_batched_ref(
             || {
                 let mut book = OrderBook::new();
 
@@ -125,7 +125,7 @@ fn bench_hot_path_operations(c: &mut Criterion) {
 
                 book
             },
-            |mut book| {
+            |book| {
                 // Measures one buy order sweeping three ask levels.
                 book.add_order(black_box(Order::new(4, Side::Buy, 102, 12)))
                     .expect("sweep order should be accepted");
@@ -134,8 +134,8 @@ fn bench_hot_path_operations(c: &mut Criterion) {
         );
     });
 
-    c.bench_function("cancel_order", |b| {
-        b.iter_batched(
+    c.bench_function("cancel_order_ref", |b| {
+        b.iter_batched_ref(
             || {
                 let mut book = OrderBook::new();
 
@@ -145,7 +145,7 @@ fn bench_hot_path_operations(c: &mut Criterion) {
 
                 book
             },
-            |mut book| {
+            |book| {
                 // Measures removing an active resting order.
                 book.cancel_order(black_box(1))
                     .expect("cancel should succeed");
@@ -154,8 +154,8 @@ fn bench_hot_path_operations(c: &mut Criterion) {
         );
     });
 
-    c.bench_function("modify_order", |b| {
-        b.iter_batched(
+    c.bench_function("modify_order_ref", |b| {
+        b.iter_batched_ref(
             || {
                 let mut book = OrderBook::new();
 
@@ -165,7 +165,7 @@ fn bench_hot_path_operations(c: &mut Criterion) {
 
                 book
             },
-            |mut book| {
+            |book| {
                 // Measures changing price and quantity of an active order.
                 book.modify_order(black_box(1), black_box(101), black_box(7))
                     .expect("modify should succeed");
@@ -198,10 +198,10 @@ fn bench_large_two_sided_books(c: &mut Criterion) {
 }
 
 fn bench_deep_cancel_modify(c: &mut Criterion) {
-    c.bench_function("cancel_from_10000_deep_level", |b| {
-        b.iter_batched(
+    c.bench_function("cancel_from_10000_deep_level_ref", |b| {
+        b.iter_batched_ref(
             || build_deep_book(10_000),
-            |mut book| {
+            |book| {
                 // Cancel near the end to expose scan cost.
                 book.cancel_order(black_box(9_999))
                     .expect("cancel should succeed");
@@ -210,10 +210,10 @@ fn bench_deep_cancel_modify(c: &mut Criterion) {
         );
     });
 
-    c.bench_function("modify_from_10000_deep_level", |b| {
-        b.iter_batched(
+    c.bench_function("modify_from_10000_deep_level_ref", |b| {
+        b.iter_batched_ref(
             || build_deep_book(10_000),
-            |mut book| {
+            |book| {
                 // Modify also removes first, so it exposes the same lookup weakness.
                 book.modify_order(black_box(9_999), black_box(101), black_box(7))
                     .expect("modify should succeed");

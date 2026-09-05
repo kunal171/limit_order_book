@@ -12,6 +12,117 @@ measure first, optimize second
 Any future optimization should compare against this file before we decide
 whether the change actually helped.
 
+## Latest Run
+
+```text
+Date: 2026-09-05
+Branch: phase-11-hft-systems
+Commit: 31b7969
+Rust: rustc 1.97.1 (8bab26f4f 2026-07-14)
+Command: cargo bench
+Verification: cargo test, 42 passed
+```
+
+Criterion reports each result as:
+
+```text
+[lower bound, estimate, upper bound]
+```
+
+Use the middle number as the main baseline estimate. Lower is better.
+
+| Benchmark | Lower | Estimate | Upper | What It Measures |
+| --- | ---: | ---: | ---: | --- |
+| `two_sided_1000_orders` | 52.532 us | 52.797 us | 53.152 us | Runs 1,000 deterministic non-crossing orders |
+| `crossing_1000_orders` | 49.813 us | 49.945 us | 50.103 us | Runs 1,000 deterministic orders that create trades through `run_scenario` |
+| `add_one_resting_order` | 78.622 ns | 78.966 ns | 79.353 ns | Creates a fresh book and adds one order that rests |
+| `single_trade` | 93.341 ns | 94.031 ns | 94.908 ns | Matches one crossing order against one resting order |
+| `multi_level_sweep` | 214.17 ns | 215.61 ns | 217.68 ns | Sweeps multiple price levels with one order |
+| `cancel_order` | 93.394 ns | 94.403 ns | 95.539 ns | Cancels one resting order |
+| `modify_order` | 146.68 ns | 147.55 ns | 148.64 ns | Modifies one resting order |
+| `two_sided_10000_orders` | 579.08 us | 580.02 us | 581.13 us | Runs 10,000 deterministic non-crossing orders |
+| `two_sided_100000_orders` | 5.6126 ms | 5.8247 ms | 6.0992 ms | Runs 100,000 deterministic non-crossing orders |
+| `cancel_from_10000_deep_level` | 3.8171 us | 3.8347 us | 3.8541 us | Cancels near the end of a 10,000-order FIFO price level |
+| `modify_from_10000_deep_level` | 3.9611 us | 3.9739 us | 3.9878 us | Modifies near the end of a 10,000-order FIFO price level |
+| `multi_symbol_100x1000_orders` | 6.6134 ms | 6.6507 ms | 6.7050 ms | Runs 100 books with 1,000 orders each |
+| `crossing_1000_events_full` | 46.648 us | 46.720 us | 46.804 us | Crossing workload with full in-memory event recording |
+| `crossing_1000_events_trades_only` | 45.035 us | 45.119 us | 45.210 us | Crossing workload recording only trade events |
+| `crossing_1000_events_disabled` | 44.401 us | 44.686 us | 45.043 us | Crossing workload with event recording disabled |
+
+## Event Mode Comparison
+
+Compare these three benchmarks with each other:
+
+```text
+crossing_1000_events_full
+crossing_1000_events_trades_only
+crossing_1000_events_disabled
+```
+
+Do not compare them directly with `crossing_1000_orders` as an event-only
+measurement. The older `crossing_1000_orders` path also accumulates trades and
+copies the event log through `run_scenario`, so it measures a slightly different
+end-to-end simulator path.
+
+Current estimate:
+
+```text
+Full:        46.720 us
+TradesOnly:  45.119 us
+Disabled:    44.686 us
+```
+
+Interpretation:
+
+```text
+Full event logging costs about 2.034 us over Disabled on this 1,000-order
+crossing workload.
+
+TradesOnly is very close to Disabled, so accepted/cancel/modify event storage is
+the larger event-log cost in this workload.
+```
+
+## Benchmark Boundary Warning
+
+Some operation benchmarks still include cleanup cost:
+
+```text
+single_trade
+multi_level_sweep
+cancel_order
+modify_order
+cancel_from_10000_deep_level
+modify_from_10000_deep_level
+```
+
+These use `iter_batched`, where the prepared `OrderBook` is consumed by the
+timed closure and dropped at the end of that closure. That means the reported
+number is operation plus teardown, not the pure operation alone.
+
+Before optimizing cancel/modify, add corrected benchmark variants using
+`iter_batched_ref`, so Criterion stops the timer before the prepared book is
+dropped.
+
+Example shape:
+
+```rust
+b.iter_batched_ref(
+    || {
+        let mut book = OrderBook::new();
+        book.add_order(Order::new(1, Side::Buy, 100, 10))
+            .expect("setup order should rest");
+        book
+    },
+    |book| {
+        black_box(book.cancel_order(1).expect("cancel should work"));
+    },
+    BatchSize::SmallInput,
+);
+```
+
+These corrected benchmark names should be new names, because they are not
+directly comparable with the older baseline.
+
 ## Run Details
 
 ```text
@@ -340,24 +451,22 @@ TradesOnly mode keeps execution output without recording every accepted command.
 Next benchmark target:
 
 ```text
-compare EventMode::Full vs EventMode::TradesOnly vs EventMode::Disabled
+add corrected operation-only benchmark variants using iter_batched_ref
 ```
 
-After event mode comparison benchmarks are added, run:
+After that, run:
 
 ```bash
 cargo test
 cargo bench
 ```
 
-Then compare especially:
+Then compare old vs new benchmark boundaries carefully:
 
 ```text
-crossing_1000_orders
-crossing_1000_events_full
-crossing_1000_events_trades_only
-crossing_1000_events_disabled
+old names: include operation plus teardown
+new names: should isolate operation timing more cleanly
 ```
 
-This will tell us how much event cloning and event storage cost in the current
-matching path.
+This will give a cleaner baseline before changing the order index or price
+ladder structure.
